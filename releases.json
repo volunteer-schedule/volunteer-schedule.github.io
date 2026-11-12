@@ -1,0 +1,100 @@
+{
+  "about": "Release notes for the shared schedule page. Every copy's What's new card reads this file. latestServer is the newest server code (Code.gs) version; copies with older server code show overseers an update notice.",
+  "latestServer": "1.7",
+  "releases": [
+    {
+      "version": "1.7", "date": "Nov 12, 2026", "title": "Contact Sheet & New Look",
+      "items": [
+        { "type": "New", "audience": "Overseers", "note": "The Master Contact Sheet now fills itself in with each person's scheduled time slots (Shifts, in column A) and every section they're scheduled in (Sections Scheduled), and anyone not scheduled yet stays blank and highlighted, so there's no box to tick by hand." },
+        { "type": "New", "audience": "Overseers", "note": "The Master Contact Sheet now has a Personal Link column with a clickable link for each person (including you), ready to copy and send, and it updates by itself whenever their access code changes." },
+        { "type": "Improved", "audience": "Everyone", "note": "The schedule pages have a new blue-and-white look that fits any event, instead of colors tied to one assembly's theme." },
+        { "type": "Improved", "audience": "Overseers", "note": "Overseers and keymen are now set right on the Master Contact Sheet (Role and Oversees columns) instead of Web Settings, so changing someone's role is one edit; a section with no keyman simply points its volunteers to the overseers, and the Conflicts tab warns if a keyman's section is misspelled." },
+        { "type": "Improved", "audience": "Overseers", "note": "On the Master Contact Sheet, overseers and keymen are now shaded light blue and no longer get the red \"not scheduled\" highlight, Last Name and First Name are columns C and D, and the Department column is gone (volunteers see a keyman's Oversees sections instead)." },
+        { "type": "Improved", "audience": "Overseers", "note": "When someone sets up their own copy, Google's approval screen now asks only to use their schedule sheets, view their Drive files, and run in the background, instead of full permission to edit and delete their Drive files." }
+      ]
+    },
+    {
+      "version": "1.6", "date": "Nov 4, 2026", "title": "Private Links & Settings",
+      "items": [
+        { "type": "New", "audience": "Everyone", "note": "Every volunteer now has their own private access code in their schedule link, and Send link uses it automatically." },
+        { "type": "New", "audience": "Overseers", "note": "Overseers can tap Generate New Link on a person (from the schedule or the Volunteer List) to turn off their old link and send them a new one." },
+        { "type": "New", "audience": "Overseers", "note": "Setting Inactivate Schedule Links to Yes on Web Settings turns off every volunteer and keyman link when the event is over; overseers can still get in." },
+        { "type": "New", "audience": "Overseers", "note": "Attendance counts and badge check-in can each be turned off on the Web Settings tab, which hides them from every page." },
+        { "type": "New", "audience": "Everyone", "note": "Spots with \"No shift needed\" typed on the schedule sheet now show an ⓘ you can tap to see why and reopen that time, which erases the text from the sheet so the spot shows + Fill." },
+        { "type": "Improved", "audience": "Everyone", "note": "In the By time view, the \"No shift needed\" list under each section is now folded up; tap it to see those spots." },
+        { "type": "Improved", "audience": "Overseers", "note": "The \"until relieved\" wording and the red reminder on the day's last shift can now be changed in the Web Settings tab (Last Shift Ends and Last Shift Warning); leave Last Shift Warning blank to hide the red reminder." },
+        { "type": "Improved", "audience": "Overseers", "note": "The schedule's name dropdown now updates itself when people are added to or removed from the Master Contact Sheet, and anyone still on the schedule stays in the list until they're swapped out." },
+        { "type": "Improved", "audience": "Everyone", "note": "Tapping Ignore on an open spot now lets you tick any of that spot's open times and either type a reason or choose Reduced Staffing-Low Traffic; reducing is no longer done from a person's name." },
+        { "type": "Improved", "audience": "Everyone", "note": "Empty 6:45 AM and 7:15 AM spots now show as open with + Fill like any other time." },
+        { "type": "Improved", "audience": "Everyone", "note": "The last shift of the day now reads \"until relieved\" and has a red reminder not to leave after the program until a keyman or overseer relieves you." },
+        { "type": "Fixed", "audience": "Everyone", "note": "After you save a swap, fill, or other change, the schedule stays right where you were instead of jumping to the top, and a small Saving… pill at the bottom shows when it's done." },
+        { "type": "Fixed", "audience": "Everyone", "note": "Reopening an unscheduled, reduced, or \"No shift needed\" spot now opens only that one time and takes you straight to picking who fills it." }
+      ]
+    },
+    {
+      "version": "1.5", "date": "Oct 31, 2026", "title": "Counts, Partners & Reduced Spots",
+      "items": [
+        { "type": "New", "audience": "Everyone", "note": "You can mark a spot as reduced for low traffic (tap the brother on duty before it, then Reduce spot after this shift); it shows as Reduced instead of open, and that brother's page tells him no relief is coming and he can leave when his shift ends." },
+        { "type": "New", "audience": "Everyone", "note": "Brothers on Exteriors, including a keyman scheduled there himself, now see who else is on Exteriors with them during each shift, with Text and Call buttons so they can pair up." },
+        { "type": "New", "audience": "Overseers", "note": "In Attendance counts, tap any spot or area to see who is counting it and text them a ready-made reminder if their number isn't in yet." },
+        { "type": "New", "audience": "Everyone", "note": "When you fill an open spot, you can also tick that spot's later open times to give them to the same person in one step; times someone already has are never changed." },
+        { "type": "New", "audience": "Everyone", "note": "Brothers counting attendance, and keymen counting their own area, can type their total right on the count reminder, submit it, and tap Change to update or clear it, all without the page reloading." },
+        { "type": "New", "audience": "Overseers", "note": "The Attendance counts card shows every counting spot’s and keyman area’s number, who sent it, and the morning and afternoon totals, and you can tap any line to type in or fix its count." },
+        { "type": "New", "audience": "Everyone", "note": "Tap Shift instructions to see what to do on a spot (starting with Exteriors); keymen see them on their own shifts and in a Shift instructions for your team card." },
+        { "type": "Improved", "audience": "Everyone", "note": "Open spots now always show on the schedule, with the red bar counting how many there are, so there's no box to tick first." },
+        { "type": "Improved", "audience": "Everyone", "note": "When the app is updated, an open page reloads itself to the new version, or shows a bar you can tap to update, so no one keeps using an old copy." },
+        { "type": "Fixed", "audience": "Everyone", "note": "Full day view no longer gets stuck when scrolling, and the automatic refresh every 2 minutes keeps your place instead of jumping back to the top." },
+        { "type": "Fixed", "audience": "Everyone", "note": "Tapping someone's name now lists baptism shifts at their real time (12:00 PM until baptism ends) instead of 11:40 AM." },
+        { "type": "Fixed", "audience": "Everyone", "note": "When someone is cancelled or removed from a 6:45 AM or 7:15 AM spot, that spot now shows as open so you can fill it." },
+        { "type": "Fixed", "audience": "Everyone", "note": "Filling a spot with someone new no longer fails with a “data validation” error, and any other refusal from the sheet is explained in plain words." },
+        { "type": "Fixed", "audience": "Everyone", "note": "By person view now follows the section buttons, like By time and Full day do." }
+      ]
+    },
+    {
+      "version": "1.4", "date": "Oct 29, 2026", "title": "Badge Check-In & Faster Edits",
+      "items": [
+        { "type": "New", "audience": "Everyone", "note": "New Check In/Out tab: check people in when they take a badge and mark Badge Returned at the end of the day, with totals that follow My letters, My sections, or Everyone." },
+        { "type": "New", "audience": "Everyone", "note": "Tap Missing Check-in to see who hasn't checked in yet, starting with anyone who should already be on duty and then when each person is next needed; keymen start on My sections." },
+        { "type": "New", "audience": "Everyone", "note": "In Check In/Out, a Text button reminds anyone who hasn’t checked in (or still has a badge out), and Badge Returned asks if he’s willing to serve next assembly." },
+        { "type": "New", "audience": "Overseers", "note": "Choose the badge checkers in Check In/Out; last names are split evenly between them, and they get a Check In/Out button on their own schedule page." },
+        { "type": "Improved", "audience": "Everyone", "note": "Swap, Fill, Remove, and Cancellation/No-show now show on the schedule instantly; the Text buttons unlock once the change is saved, and if it can't save, the schedule goes back with an alert." }
+      ]
+    },
+    {
+      "version": "1.3", "date": "Oct 27, 2026", "title": "Attendance Counts & Send Link",
+      "items": [
+        { "type": "New", "audience": "Overseers", "note": "Set the Morning and Afternoon Attendance Count times on the day from the Attendance counts card at the top of your page (tap + to open it); nobody sees a count until its time is set." },
+        { "type": "New", "audience": "Everyone", "note": "Once a count time is set, keymen see a small blue Attendance Count bar under the morning meeting, and brothers in the counting spots at that time see it on their schedule." },
+        { "type": "New", "audience": "Everyone", "note": "Send link: tap any name in the schedule, or use the Volunteer List, to open a text with that person’s personal schedule link already typed in." },
+        { "type": "New", "audience": "Everyone", "note": "Tap Ignore on an open spot to leave it unscheduled with a short note; the spot stops showing red and everyone sees the note instead (tap it and choose Reopen Shift for Scheduling to undo)." },
+        { "type": "New", "audience": "Everyone", "note": "In By person view, shifts now line up neatly under each name, and you can tap any shift to swap or remove that person from it." },
+        { "type": "Improved", "audience": "Overseers", "note": "Send links is now part of the Volunteer List (keyman and overseer links fold away under +), cancelled people get no link, and volunteer pages no longer offer “Choose another name.”" },
+        { "type": "Improved", "audience": "Everyone", "note": "In Full day view, the time row, spot numbers, and section names stay in view while you scroll." },
+        { "type": "Improved", "audience": "Everyone", "note": "The map buttons are renamed: Assignment Map and Department Directory." }
+      ]
+    },
+    {
+      "version": "1.2", "date": "Oct 26, 2026", "title": "Volunteer List, What’s New, Keyman Tools",
+      "items": [
+        { "type": "New", "audience": "Everyone", "note": "What’s new card: see the latest app updates right on your page." },
+        { "type": "New", "audience": "Everyone", "note": "Keymen now have a Volunteer List tab showing everyone in their sections, with a Cancellation/No-show button (or Add back to roster) next to each person." },
+        { "type": "New", "audience": "Everyone", "note": "By person view now has a Cancellation/No-show button next to each name." },
+        { "type": "Improved", "audience": "Overseers", "note": "Volunteer contact info is now the Volunteer List, with a Cancellation/No-show button (or Add back to roster) next to each person." },
+        { "type": "Fixed", "audience": "Everyone", "note": "What’s new and the Conflicts tab now stay marked as read after you refresh, even on a different phone or computer." },
+        { "type": "Fixed", "audience": "Overseers", "note": "Links have been fixed so volunteers won't get \"unable to open file\" when opening them." }
+      ]
+    },
+    {
+      "version": "1.1", "date": "Oct 23, 2026", "title": "Open Spots & Cancellations",
+      "items": [
+        { "type": "New", "audience": "Overseers", "note": "Cancellation/No-show button: clears someone’s spots for the day and keeps them out of the Swap/Fill list." },
+        { "type": "New", "audience": "Overseers", "note": "Add back to roster: undo a cancellation from the Conflicts tab or the person’s name card." },
+        { "type": "New", "audience": "Everyone", "note": "Open spots in Full day view: tap the red bar to see every open spot, each with a + Fill button." },
+        { "type": "Improved", "audience": "Everyone", "note": "Open spots now show in schedule order (3B appears right after Spot 3)." },
+        { "type": "Improved", "audience": "Overseers", "note": "The Conflicts tab shows a red number only for new conflicts, which clears once you’ve looked." },
+        { "type": "Improved", "audience": "Everyone", "note": "Every pop-up has an ✕ to close it, and Cancel stays visible while you scroll the Fill/Swap list." },
+        { "type": "Fixed", "audience": "Everyone", "note": "Swap and Remove on a person’s name card work again." }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Update your schedule app</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{--blue:#4A6DA7;--blue-deep:#2F4F86;--soft:#E8EFFB;--ink:#292929;--muted:#757575;--line:#E2E2E2;--paper:#F1F1F1}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans",system-ui,-apple-system,Arial,sans-serif;line-height:1.5}
+  header{background:#fff;padding:24px 16px 18px}
+  .bar{height:7px;width:min(70%,420px);background:var(--blue);margin-bottom:14px}
+  h1{font-size:24px;font-weight:600;margin:0}
+  main{max-width:720px;margin:0 auto;padding:16px}
+  .card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:16px 18px;margin:0 0 14px}
+  h2{font-size:17px;margin:0 0 8px}
+  ol{margin:0;padding-left:22px} li{margin:6px 0}
+  a{color:var(--blue-deep);font-weight:600}
+  .muted{color:var(--muted);font-size:14px}
+  code{background:var(--soft);border-radius:6px;padding:1px 6px;font-size:14px}
+</style>
+</head>
+<body>
+<header><div style="max-width:720px;margin:0 auto"><div class="bar"></div><h1>Update your schedule app</h1>
+<p class="muted" style="margin:6px 0 0">For overseers who set up their own copy of the schedule. Takes about 5 minutes.</p></div></header>
+<main>
+  <div class="card">
+    <h2>Why you're seeing this</h2>
+    <p style="margin:0">The schedule pages update for everyone automatically. A few new features also need the small
+    program inside your own schedule sheet (its "server code") to be updated. Your data stays in your sheets; nothing
+    is lost or moved.</p>
+  </div>
+  <div class="card">
+    <h2>1. Copy in the new server code</h2>
+    <ol>
+      <li>Open your schedule sheet, then click <strong>Extensions → Apps Script</strong>.</li>
+      <li>Open <a href="code/Code.gs.txt" target="_blank" rel="noopener">the new Code.gs</a> in another tab. Select all of it
+        (<code>Ctrl+A</code> or <code>⌘A</code>) and copy it.</li>
+      <li>Back in Apps Script, click <strong>Code.gs</strong> on the left, select everything there, and paste to replace it.</li>
+      <li>Do the same with <a href="code/Index.html.txt" target="_blank" rel="noopener">the new Index.html</a>: copy it all,
+        click <strong>Index.html</strong> on the left, select everything, and paste.</li>
+      <li>Click the <strong>Save</strong> icon (💾).</li>
+    </ol>
+  </div>
+  <div class="card">
+    <h2>2. Publish the update (keeps your same links)</h2>
+    <ol>
+      <li>Click <strong>Deploy → Manage deployments</strong>.</li>
+      <li>Click the <strong>pencil</strong> icon.</li>
+      <li>Under <strong>Version</strong>, choose <strong>New version</strong>, then click <strong>Deploy</strong>.</li>
+      <li>If Google asks you to approve access, choose your account, click <strong>Advanced</strong>, then
+        <strong>Go to … (unsafe)</strong>, check <strong>Select all</strong>, and click <strong>Continue</strong>.
+        It says "unsafe" only because Google hasn't reviewed this homemade script.</li>
+    </ol>
+    <p class="muted" style="margin:10px 0 0">Do <strong>not</strong> choose "New deployment"; that would give you a new link
+    and the links you already sent would stop working.</p>
+  </div>
+  <div class="card">
+    <h2>3. Check it</h2>
+    <p style="margin:0">Open your overseer page and refresh. The update notice should be gone.</p>
+  </div>
+</main>
+</body>
+</html>

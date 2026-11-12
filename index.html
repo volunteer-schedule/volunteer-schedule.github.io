@@ -695,6 +695,8 @@ function leader(code) {
     }
     L = d; L.code = String(code).trim().toUpperCase(); LINKS = d.links || {};
     SEEN_MEM = null; SEEN_REL = null;   // reload what this leader has read from the server
+    applySharedNotes(L);
+    if (SHARED_NOTES === null) loadSharedNotes().then(() => { if (L && SHARED_NOTES) { applySharedNotes(L); paintLeader(); } });
     paintHeader(d.event);
     setUrl({ code: L.code });
     if (UI.slot === null || UI.slot >= d.slots.length) UI.slot = currentSlot();
@@ -711,7 +713,7 @@ function silentRefresh() {
     if (!d.ok) return;
     whenStill(() => {
       if (seq !== EDITSEQ || PENDING) return;   // an edit happened meanwhile; this copy is already out of date
-      const c = L.code; L = d; L.code = c; LINKS = d.links || {}; repaintInPlace();
+      const c = L.code; L = d; L.code = c; LINKS = d.links || {}; applySharedNotes(L); repaintInPlace();
     });
   });
 }
@@ -820,6 +822,35 @@ function markConflictsSeen(keys) {
   if (!same) saveSeen({ conflicts: ids });
 }
 
+/* ---------- Shared release notes ----------
+   One notes file on the shared page serves every copy. If it can't be reached, the page keeps the notes from this
+   schedule's own Release Notes tab. Overseers also learn when their copy's server code is older than the newest. */
+const NOTES_URL = 'https://volunteer-schedule.github.io/releases.json';
+let SHARED_NOTES = null;   // null = not tried yet, false = not available, else the file
+function loadSharedNotes() {
+  if (SHARED_NOTES !== null) return Promise.resolve(SHARED_NOTES);
+  return fetch(BOOT.shared ? 'releases.json' : NOTES_URL, { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : null)).catch(() => null)
+    .then(j => (SHARED_NOTES = j && Array.isArray(j.releases) ? j : false));
+}
+function verNewer(a, b) {   // is version a newer than b? ("1.10" > "1.9")
+  const x = String(a || '0').split('.').map(n => parseInt(n, 10) || 0), y = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+function applySharedNotes(d) {
+  if (!d || !SHARED_NOTES) return;
+  d.releases = SHARED_NOTES.releases.map(r => ({ version: r.version, date: r.date || '', title: r.title || '',
+    items: (r.items || []).filter(i => d.me.all || i.audience !== 'Overseers').map(i => ({ type: i.type, note: i.note })) }))
+    .filter(r => r.items.length);
+  d.updateAvailable = d.me.all && verNewer(SHARED_NOTES.latestServer, d.appVersion) ? SHARED_NOTES.latestServer : '';
+}
+function updateNotice(d) {
+  if (!d.updateAvailable) return '';
+  return '<div class="note" style="margin-top:10px">⬆ A newer version of the schedule app is ready for your copy (yours: ' + esc(d.appVersion || 'older') +
+    ', newest: ' + esc(d.updateAvailable) + '). <a href="https://volunteer-schedule.github.io/update.html" target="_blank" rel="noopener">How to update</a></div>';
+}
+
 /* ---------- What's new ---------- */
 let SEEN_REL = null;   // newest version this leader has opened
 function releaseUnseen(rel) {
@@ -876,7 +907,7 @@ function drawLeader() {
   let html = '<div class="card"><div class="row"><div class="avatar">' + esc(initials(me.name)) + '</div><div class="grow"><div style="font-weight:700;font-size:17px">' +
     esc(firstLast(me.name)) + '</div><div class="muted small">' + esc(me.role) + (me.all ? ' · All sections' : ' · ' + esc(me.sections.join(', '))) + '</div></div>' +
     '<button class="btn sm line" id="refresh">↻</button></div><div class="small muted" style="margin-top:8px">Updated ' + esc(d.loadedAt) +
-    ' · refreshes every 2 minutes' + (d.releases && d.releases.length && !releaseUnseen(d.releases) ? ' · <button class="wnlink" id="wnlink">✨ What’s new</button>' : '') + '</div>' + docRow(d.docs) + whatsNewRow(d.releases) + (me.all ? '' : alertBox(sectionAlerts(d.sectionNotes || {}, d.sections))) + '</div>';
+    ' · refreshes every 2 minutes' + (d.releases && d.releases.length && !releaseUnseen(d.releases) ? ' · <button class="wnlink" id="wnlink">✨ What’s new</button>' : '') + '</div>' + docRow(d.docs) + whatsNewRow(d.releases) + updateNotice(d) + (me.all ? '' : alertBox(sectionAlerts(d.sectionNotes || {}, d.sections))) + '</div>';
 
   if (me.all && dups) {
     html += '<div class="alertbar" id="dupbar">⚠ ' + dups + ' double-booking' + (dups > 1 ? 's' : '') + ' found on the schedule — tap to review</div>';

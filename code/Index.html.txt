@@ -1,0 +1,1914 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<meta name="color-scheme" content="light">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --gold:#4A6DA7; --gold-deep:#2F4F86; --gold-soft:#E8EFFB;   /* jw.org-style blue (names kept from the old gold theme) */
+    --sun1:#F4F7FC; --sun2:#DCE6F6; --sun3:#C2D4F1;
+    --ink:#292929; --muted:#757575; --line:#E2E2E2; --paper:#F1F1F1; --card:#FFFFFF;
+    --now:#2E7D4F; --now-soft:#E3F2E8; --warn:#B3261E; --warn-soft:#FBE7E5;
+    --radius:16px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--paper);color:var(--ink);font-family:"Noto Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-text-size-adjust:100%}
+  body{padding-bottom:env(safe-area-inset-bottom,0px)}
+  button{font:inherit;color:inherit}
+  a{color:inherit}
+  .wrap{max-width:860px;margin:0 auto;padding:0 18px}
+
+  /* ---------- Hero (program-cover style) ---------- */
+  .hero{background:#fff;padding:26px 0 0}
+  .hero .bar{height:9px;width:min(78%,520px);background:var(--gold);margin-bottom:18px}
+  .hero h1{font-weight:500;font-size:clamp(28px,7.4vw,46px);line-height:1.08;margin:0;text-indent:-.42em;padding-left:.42em;letter-spacing:-.01em}
+  .hero .scripture{font-weight:700;font-size:14px;letter-spacing:.06em;margin:12px 0 0}
+  .sunband{margin-top:22px;background:linear-gradient(115deg,var(--sun1) 0%,var(--sun2) 55%,var(--sun3) 100%);padding:16px 0 18px;position:relative;overflow:hidden}
+  .sunband:after{content:"";position:absolute;right:-60px;top:-80px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle,rgba(255,255,255,.7),rgba(255,255,255,0) 70%)}
+  .sunband .event{font-weight:600;font-size:16px;position:relative}
+  .sunband .sub{font-size:13.5px;color:#3C4250;margin-top:3px;position:relative}
+  .sunband .dept{display:inline-block;margin-top:12px;background:var(--ink);color:#fff;border-radius:999px;padding:7px 16px;font-size:14.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;position:relative;box-shadow:0 2px 6px rgba(0,0,0,.25)}
+  .card.keyman{border:2px solid var(--gold);background:#F4F7FC;box-shadow:0 0 0 4px var(--gold-soft)}
+  .card.keyman .avatar{background:var(--gold);color:#fff}
+  .card.keyman .contact div[style*="font-weight:600"]{font-size:17px}
+  .deptpill{display:inline-block;margin-left:6px;background:var(--gold-soft);color:var(--gold-deep);border-radius:999px;padding:2px 9px;font-size:12px;font-weight:700;vertical-align:middle}
+  .group-head{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--sun1);border-radius:8px;padding:6px 10px;margin:12px 0 4px}
+
+  /* ---------- Common ---------- */
+  main{padding:18px 0 40px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:var(--radius);padding:16px;margin:0 0 14px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gold-deep);margin:0 0 6px}
+  h2{font-size:24px;font-weight:600;margin:0}
+  h3{font-size:17px;font-weight:600;margin:0}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  .row{display:flex;align-items:center;gap:10px}
+  .grow{flex:1;min-width:0}
+  .btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;border:0;border-radius:999px;padding:10px 16px;font-weight:600;font-size:14.5px;background:var(--gold);color:#fff;cursor:pointer;text-decoration:none;min-height:42px}
+  .btn.ghost{background:var(--gold-soft);color:var(--gold-deep)}
+  .btn.line{background:#fff;border:1px solid var(--line)}
+  .btn.sm{padding:7px 12px;min-height:34px;font-size:13.5px}
+  .btn.sm.xs{padding:5px 9px;min-height:30px;font-size:12.5px}
+  .linkrow.vlink{gap:5px}
+  .linkrow.vlink .grow{overflow-wrap:anywhere;font-size:15px}
+  .btns{display:flex;gap:8px;flex-wrap:wrap}
+  .pill{display:inline-block;border-radius:999px;padding:3px 10px;font-size:12px;font-weight:700;letter-spacing:.04em}
+  .pill.now{background:var(--now);color:#fff}
+  .pill.next{background:var(--gold-soft);color:var(--gold-deep)}
+  .note{border-left:4px solid var(--gold);background:var(--gold-soft);border-radius:10px;padding:10px 12px;font-size:14px;margin-top:10px;white-space:pre-line}
+  .center{text-align:center}
+  .spinner{width:34px;height:34px;border-radius:50%;border:4px solid var(--gold-soft);border-top-color:var(--gold);animation:spin 1s linear infinite;margin:40px auto}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  input[type=search],input[type=text]{width:100%;font:inherit;font-size:16px;padding:13px 14px;border-radius:12px;border:1px solid var(--line);background:#fff;outline:none}
+  input:focus{border-color:var(--gold);box-shadow:0 0 0 3px var(--gold-soft)}
+  .linkbtn{background:none;border:0;padding:0;color:var(--gold-deep);font-weight:600;text-decoration:underline;cursor:pointer}
+
+  /* ---------- Name picker ---------- */
+  .names{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:8px;margin-top:12px}
+  .names button{background:#fff;border:1px solid var(--line);border-radius:12px;padding:12px;text-align:left;font-size:15px;cursor:pointer}
+  .names button:active{background:var(--gold-soft)}
+
+  /* ---------- Volunteer timeline ---------- */
+  .status{border-radius:var(--radius);padding:14px 16px;margin-bottom:14px;font-weight:600}
+  .status.on{background:var(--now-soft);color:#174A2D}
+  .status.next{background:var(--gold-soft);color:#2F4F86}
+  .tl{position:relative;margin:4px 0 14px}
+  .shift{display:flex;gap:14px;background:#fff;border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px}
+  .shift .time{min-width:86px;font-weight:700;font-size:15px;line-height:1.3}
+  .shift .time .to{display:block;font-weight:500;color:var(--muted);font-size:13px}
+  .shift .spot{font-size:21px;font-weight:700;color:var(--gold-deep);line-height:1.15}
+  .shift.is-now{border:2px solid var(--now);box-shadow:0 0 0 4px var(--now-soft)}
+  .shift.is-next{border:2px solid var(--gold)}
+  .shift.past{opacity:.55}
+  .gap{font-size:13.5px;color:var(--muted);padding:2px 16px 12px 116px}
+  .contact{display:flex;align-items:center;gap:12px;padding:10px 0;border-top:1px solid var(--line)}
+  .contact:first-of-type{border-top:0}
+  .avatar{width:40px;height:40px;border-radius:50%;background:var(--gold-soft);color:var(--gold-deep);display:flex;align-items:center;justify-content:center;font-weight:700;flex:none}
+
+  /* ---------- Leader view ---------- */
+  .tabs{display:flex;gap:6px;margin:0 0 12px;border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+  .tabs::-webkit-scrollbar{display:none}
+  .tabs button{flex:none;white-space:nowrap;background:none;border:0;padding:10px 12px;font-weight:600;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer}
+  .tabs button.alert{color:var(--warn)}
+  .tabs button.alert.on{border-bottom-color:var(--warn)}
+  .redbadge{display:inline-block;background:var(--warn);color:#fff;border-radius:999px;padding:1px 8px;font-size:12px;margin-left:3px}
+  .alertbar{background:var(--warn);color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;margin:0 0 14px;cursor:pointer;box-shadow:0 2px 8px rgba(179,38,30,.3)}
+  .shift.meeting{background:#2B333F;border:2px solid var(--gold);color:#fff;box-shadow:0 3px 10px rgba(0,0,0,.25)}
+  .shift.meeting .time{color:var(--sun2)}
+  .shift.meeting .spot{color:#fff}
+  .shift.meeting .small{color:#D5DCE8}
+  .pill.mtg{background:var(--gold);color:#fff;margin-bottom:4px}
+  .cistats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;text-align:center}
+  .cistats div{background:var(--gold-soft);border-radius:12px;padding:10px 4px}
+  .cistats div.miss{background:var(--warn-soft)}
+  .cistats b{display:block;font-size:24px;line-height:1.1}
+  .cistats span{font-size:12px;color:var(--muted);font-weight:600}
+  .ciseg{display:grid;grid-template-columns:repeat(4,1fr);width:100%;border-radius:16px}
+  .ciseg button{padding:7px 4px;font-size:12.5px;line-height:1.2;border-radius:13px}
+  .cinext{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+  .cirow{display:flex;align-items:center;gap:8px;padding:10px 0;border-top:1px solid var(--line)}
+  .cirow:first-child{border-top:0}
+  .cirow .grow{font-size:15.5px}
+  .cirow.done .grow{color:var(--muted)}
+  .cibtns{display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end;max-width:62%}
+  .cires{font-size:12.5px;font-weight:700}
+  .cires.in{color:#1E7A3C}
+  .cires.out{color:#555}
+  .cilate{color:var(--warn);font-weight:700}
+  .cientry{border:2px solid var(--gold)}
+  #ccadd{font:inherit;font-size:15px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;min-width:0}
+  .instr{margin-top:8px;border:1px solid var(--gold);border-radius:10px;background:#fff;overflow:hidden}
+  .instr summary{list-style:none;cursor:pointer;padding:7px 10px;font-size:13.5px;font-weight:700;color:var(--gold-deep);display:flex;align-items:center;gap:6px}
+  .instr summary::-webkit-details-marker{display:none}
+  .instr summary::after{content:'+';margin-left:auto;font-size:18px;line-height:1}
+  .instr[open] summary::after{content:'−'}
+  .instr div{padding:0 10px 10px;font-size:14px;line-height:1.45;color:var(--ink);white-space:pre-line}
+  .countbar{display:flex;align-items:center;gap:12px;background:#E8F2FB;border:1px solid #9CC3E6;color:#16405F;border-radius:12px;padding:9px 14px;margin:0 0 10px;font-size:14.5px;font-weight:600}
+  .countbar .ct{font-weight:800;color:#0F5A92;white-space:nowrap;min-width:72px}
+  .collhead{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;padding:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+  .collhead .plus{flex:none;width:32px;height:32px;border-radius:50%;border:1.5px solid var(--gold-deep);color:var(--gold-deep);display:flex;align-items:center;justify-content:center;font-size:22px;font-weight:700;line-height:1}
+  .countrow{display:flex;align-items:center;gap:8px;padding:8px 0;border-top:1px solid var(--line)}
+  .countrow:first-of-type{border-top:0}
+  .alsobox{border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin:0 0 12px;background:#F7F7F7}
+  .alsobox .radio{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:6px 0}
+  .tallyin{display:flex;align-items:center;gap:8px;flex-wrap:wrap;background:#fff;border:1px solid #9CC3E6;border-radius:12px;padding:10px 12px;margin:-4px 0 10px}
+  .tallyin .lbl{font-weight:700;flex:1 1 auto}
+  .tallyin input,.sheet input.tallynum{font:inherit;font-size:18px;width:110px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff}
+  .tallyin .done{color:#1E7A3C;font-weight:700}
+  .tallylist{margin-top:12px;border-top:1px solid var(--line);padding-top:10px}
+  .tallylist h4{margin:0 0 6px;font-size:15px}
+  .tallyrow{display:flex;align-items:center;gap:10px;width:100%;background:none;border:0;border-top:1px solid var(--line);padding:8px 2px;font:inherit;color:inherit;text-align:left;cursor:pointer}
+  .tallyrow .n{margin-left:auto;font-weight:800;font-size:16px;white-space:nowrap}
+  .tallyrow .n.miss{color:var(--muted);font-weight:600;font-size:14px}
+  .tallytotal{display:flex;justify-content:space-between;border-top:2px solid var(--gold-deep);padding:9px 2px 2px;font-weight:800;font-size:17px}
+  .countrow input[type=time]{font:inherit;font-size:16px;padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:#fff;min-width:118px}
+  .mnote{margin-top:8px;font-size:13.5px;color:#DCE6F6;border-top:1px solid rgba(255,255,255,.18);padding-top:8px}
+  .sheet{max-height:88vh;overflow-y:auto;-webkit-overflow-scrolling:touch}
+  .sheet .xbtn{position:absolute;top:10px;right:12px;width:36px;height:36px;border-radius:50%;border:1px solid var(--line);background:#fff;color:var(--muted);font-size:17px;line-height:1;cursor:pointer;z-index:2;font-family:inherit}
+  .sheet > .big{padding-right:40px}
+  .sheet.fixedlist{display:flex;flex-direction:column;overflow:hidden}
+  .sheet.fixedlist > *{flex-shrink:0}
+  .sheet.fixedlist #krows{flex:1 1 auto;min-height:90px;overflow-y:auto;-webkit-overflow-scrolling:touch;padding-bottom:4px}
+  .sheet.fixedlist .pickfoot{padding-top:10px;border-top:1px solid var(--line);margin-top:6px}
+  .wnrow{display:flex;align-items:center;gap:10px;width:100%;margin-top:12px;padding:10px 12px;border:1px solid var(--line);border-radius:12px;background:var(--sun1);text-align:left;cursor:pointer}
+  .wnrow.unseen{border-color:var(--gold);background:linear-gradient(135deg,var(--sun1),var(--sun2))}
+  .wnrow .grow{font-size:14px}
+  .wnlink{background:none;border:0;padding:0;margin:0;font:inherit;color:var(--gold-deep);font-weight:700;text-decoration:underline;text-underline-offset:2px;cursor:pointer;white-space:nowrap}
+  .wnver{margin:16px 0 4px;padding-top:12px;border-top:1px solid var(--line)}
+  .wnver:first-of-type{border-top:0;padding-top:0}
+  .wnver strong{font-size:16px}
+  .wngroup{font-size:12px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--gold-deep);margin:10px 0 4px}
+  .wnlist{margin:0;padding-left:20px;line-height:1.55}
+  .wnlist li{margin-bottom:4px}
+  .newpill{display:inline-block;background:var(--warn);color:#fff;border-radius:999px;padding:1px 7px;font-size:11px;font-weight:700;margin-right:6px;vertical-align:middle}
+  .editbox{margin-top:14px;padding:12px;border:1px solid var(--line);border-radius:12px;background:var(--sun1)}
+  .agepill{display:inline-block;background:#EEEEEE;color:#444;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700;vertical-align:middle}
+  .cand{display:flex;align-items:center;gap:10px;width:100%;text-align:left;background:#fff;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:6px;cursor:pointer}
+  .cand.busy{background:#FFF6F5;border-color:#F1C9C5}
+  .cand .chev{font-size:22px;color:var(--muted)}
+  .warn{color:var(--warn);font-weight:700}
+  .toggle{font-size:13.5px;color:var(--muted);display:flex;align-items:center;gap:6px}
+  /* "Open spots" count — only appears when a spot truly needs filling, so it stands out */
+  .openbar{display:flex;align-items:center;gap:10px;width:100%;margin:-2px 0 12px;padding:11px 14px;border-radius:14px;
+    background:var(--warn-soft);border:2px solid var(--warn);color:#7A1A14;font-weight:700;font-size:15px;box-shadow:0 2px 8px rgba(179,38,30,.18)}
+  .openbar .grow{line-height:1.25}
+  .openbar .sub{display:block;font-weight:500;font-size:12.5px;color:#8E3A33}
+  .openbar .cnt{background:var(--warn);color:#fff;border-radius:999px;padding:2px 10px;font-size:14px;font-weight:800;flex:none;animation:openpulse 1.8s ease-in-out infinite}
+  @keyframes openpulse{0%,100%{box-shadow:0 0 0 0 rgba(179,38,30,.45)}50%{box-shadow:0 0 0 6px rgba(179,38,30,0)}}
+  @media (prefers-reduced-motion:reduce){.openbar .cnt{animation:none}}
+  .keypill{display:inline-block;background:var(--gold);color:#fff;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:700;vertical-align:middle}
+  .limits{margin-top:4px;font-size:12.5px;color:#7A4A00;background:#FFF4DC;border:1px solid #F0D9A6;border-radius:8px;padding:4px 8px}
+  .limits span{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+  .limitsbox{margin:10px 0 12px;font-size:14px;color:#5A3E00;background:#FFF4DC;border:2px solid #E9C46A;border-radius:12px;padding:10px 12px;line-height:1.45}
+  .goldbadge{display:inline-block;background:var(--gold);color:#fff;border-radius:999px;padding:1px 8px;font-size:12px;margin-left:3px}
+  .newver{position:fixed;left:12px;right:12px;bottom:calc(12px + env(safe-area-inset-bottom));z-index:60;display:block;text-align:center;text-decoration:none;
+    background:var(--gold);color:#fff;border-radius:14px;padding:14px 16px;font-weight:700;box-shadow:0 6px 20px rgba(0,0,0,.25)}
+  .changebar{background:var(--gold);color:#fff;border-radius:14px;padding:12px 16px;font-weight:700;margin:0 0 14px;cursor:pointer}
+  .btn.loading{opacity:.85;cursor:wait}
+  .spin{display:inline-block;width:14px;height:14px;border-radius:50%;border:2px solid rgba(0,0,0,.18);border-top-color:currentColor;animation:spin .8s linear infinite;margin-right:6px;vertical-align:-2px}
+  .btn.danger{background:var(--warn);color:#fff}
+  .issue .btn{align-self:center;flex:none;min-height:34px;height:auto}
+  .issue.unrev{background:#F4F7FC;margin:0 -8px;padding:10px 8px;border-radius:8px}
+  .alertnote{display:flex;gap:10px;align-items:center;margin-top:12px;background:var(--warn-soft);border:2px solid var(--warn);color:var(--warn);border-radius:12px;padding:10px 12px;font-weight:800;font-size:15px;letter-spacing:.01em}
+  .alertnote .ico{font-size:22px;flex:none}
+  .sec-head + .alertnote{margin:0 0 8px}
+  .docrow{display:grid;grid-template-columns:repeat(auto-fit,minmax(96px,1fr));gap:8px;margin-top:12px}
+  .docrow .btn{flex-direction:column;gap:2px;font-size:13px;line-height:1.2;padding:9px 6px;border-radius:12px;text-align:center;min-height:56px}
+  .docrow .btn span{font-size:17px}
+  .pcard{padding:12px 14px}
+  .pcard .person{font-size:16px;text-align:left}
+  .pshift{display:grid;grid-template-columns:minmax(118px,auto) 1fr;gap:10px;padding:8px 0;border-top:1px solid var(--line);font-size:14px;align-items:center}
+  .pshift:first-of-type{border-top:0}
+  .pshift .pt{font-weight:700;color:var(--gold-deep);font-size:13px}
+  .pshift.now{background:var(--now-soft);border-radius:8px;padding:8px}
+  .pshift.next{background:var(--gold-soft);border-radius:8px;padding:8px}
+  button.pshift{width:100%;background:none;border-left:0;border-right:0;border-bottom:0;font:inherit;color:inherit;text-align:left;cursor:pointer}
+  /* one shared set of columns per person, so every time and spot lines up under each other */
+  .pblocks{display:grid;grid-template-columns:fit-content(46%) 1fr auto}
+  .pblocks .pshift{grid-column:1 / -1;grid-template-columns:subgrid}
+  .pblocks .pshift .muted.small{display:block}
+  button.pshift.now{background:var(--now-soft)}
+  button.pshift.next{background:var(--gold-soft)}
+  .pshift .chev{color:var(--gold-deep);font-size:18px}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--gold)}
+  .chips{display:flex;gap:8px;overflow-x:auto;padding:2px 0 10px;scrollbar-width:none}
+  .chips::-webkit-scrollbar{display:none}
+  .chip{flex:none;border:1px solid var(--line);background:#fff;border-radius:999px;padding:8px 14px;font-size:14px;font-weight:600;cursor:pointer;white-space:nowrap}
+  .chip.on{background:var(--ink);color:#fff;border-color:var(--ink)}
+  .chip .dot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--now);margin-right:6px;vertical-align:middle}
+  .slots{display:flex;gap:6px;overflow-x:auto;padding:2px 0 12px;scrollbar-width:none}
+  .slots::-webkit-scrollbar{display:none}
+  .slot{flex:none;border:1px solid var(--line);background:#fff;border-radius:12px;padding:8px 12px;font-size:14px;font-weight:600;cursor:pointer;text-align:center}
+  .slot small{display:block;font-size:10.5px;font-weight:700;letter-spacing:.06em;color:var(--now)}
+  .slot.on{background:var(--gold);border-color:var(--gold);color:#fff}
+  .slot.on small{color:#fff}
+  .seg{display:inline-flex;background:var(--gold-soft);border-radius:999px;padding:3px}
+  .seg button{border:0;background:none;border-radius:999px;padding:7px 12px;font-weight:600;font-size:13.5px;color:var(--gold-deep);cursor:pointer}
+  .seg button.on{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+  .sec-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;margin-bottom:6px}
+  .lead{font-size:13px;color:var(--muted)}
+  .spotrow{display:grid;grid-template-columns:minmax(84px,auto) 1fr;gap:10px;padding:10px 0;border-top:1px solid var(--line);align-items:center}
+  .spotrow:first-of-type{border-top:0}
+  .spotrow .sp{font-weight:700;color:var(--gold-deep);font-size:14.5px}
+  .spotrow .sp small{display:block;font-weight:500;color:var(--muted);font-size:12px}
+  .who{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+  .person{border:0;background:var(--gold-soft);border-radius:10px;padding:7px 11px;font-weight:600;font-size:14.5px;cursor:pointer;text-align:left}
+  .person:active{filter:brightness(.95)}
+  .person.has{background:#E8EFFB}
+  .open{color:var(--muted);font-style:italic;font-size:14px}
+  /* open spots — same red call-out as the open spots bar */
+  .spotrow.openspot{background:var(--warn-soft);border:2px solid var(--warn);border-radius:12px;padding:10px 12px;margin:8px 0}
+  .spotrow.openspot + .spotrow{border-top:0}
+  .spotrow.openspot .sp{color:#7A1A14}
+  .radio{display:flex;align-items:center;gap:10px;padding:8px 0;font-size:15px;cursor:pointer}
+  .radio input{width:20px;height:20px;accent-color:var(--gold-deep);margin:0;flex:none}
+  .spotrow.unsched{background:#F2F2F2;border-radius:12px;padding:10px 12px;margin:8px 0;cursor:pointer}
+  .spotrow.unsched + .spotrow{border-top:0}
+  .spotrow.unsched .sp{color:var(--muted)}
+  .unschedpill{display:inline-block;background:#E6E6E6;color:#555;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:800;letter-spacing:.02em}
+  .unschednote{display:block;margin-top:4px;font-size:13.5px;color:var(--ink)}
+  .closedline{margin-top:8px;padding-top:8px;border-top:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+  .closedline summary{cursor:pointer;list-style:none;font-weight:600}
+  .closedline summary::-webkit-details-marker{display:none}
+  .closedline summary::after{content:' ▸'}
+  .closedline[open] summary::after{content:' ▾'}
+  .cllist{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+  .redpill{display:inline-block;background:#E4EEF6;color:#1F4E79;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:800;letter-spacing:.02em}
+  #savepill{position:fixed;left:50%;bottom:calc(14px + env(safe-area-inset-bottom,0px));transform:translate(-50%,20px);opacity:0;pointer-events:none;z-index:60;
+    background:var(--ink);color:#fff;border-radius:999px;padding:7px 14px;font-size:13.5px;font-weight:700;transition:opacity .2s,transform .2s;display:flex;align-items:center;gap:8px}
+  #savepill.show{opacity:1;transform:translate(-50%,0)}
+  #savepill .spin{width:14px;height:14px;margin:0;border-color:rgba(255,255,255,.3);border-top-color:#fff}
+  .stayput{margin-top:8px;padding:8px 10px;border-radius:10px;background:var(--warn-soft);border:1px solid var(--warn);color:#7A1A14;font-size:13.5px;font-weight:700}
+  .relief{margin-top:8px;padding:8px 10px;border-radius:10px;background:#EAF5EC;border:1px solid #BFDFC6;color:#1E5A2C;font-size:13.5px}
+  .partners{margin-top:8px;padding:8px 10px;border-radius:10px;background:#F4F7FC;border:1px solid #C2D4F1}
+  .partners .prow{display:flex;align-items:center;gap:8px;padding:4px 0}
+  .partners .prow + .prow{border-top:1px solid #DCE6F6}
+  .ginfo{border:1px solid var(--line);background:#F2F2F2;color:#555;border-radius:8px;padding:3px 8px;font:inherit;font-size:12px;font-weight:700;cursor:pointer}
+  .btn.sm.ign{background:#fff;color:#7A1A14;border:1px solid var(--warn)}
+  .openpill{display:inline-block;background:var(--warn);color:#fff;border-radius:999px;padding:3px 10px;font-size:12.5px;font-weight:800;letter-spacing:.04em}
+  .btn.fill{background:var(--warn);color:#fff;margin-left:auto}
+  .nextup{width:100%;font-size:12.5px;color:var(--muted)}
+  /* scrolls inside its own box so the time row (top) and spot column (left) stay in view */
+  .gridwrap{overflow:auto;max-height:calc(100vh - 150px);max-height:calc(100dvh - 150px);border:1px solid var(--line);border-radius:var(--radius);background:#fff;overscroll-behavior:auto}
+  table.grid{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%}
+  table.grid th,table.grid td{padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap;text-align:left;vertical-align:top}
+  table.grid th{background:var(--sun1);font-size:12px;letter-spacing:.03em;position:sticky;top:0;z-index:2}
+  table.grid td.first,table.grid th.first{white-space:normal;min-width:60px;max-width:110px;position:sticky;left:0;background:#fff;z-index:1;font-weight:700;color:var(--gold-deep);border-right:1px solid var(--line)}
+  table.grid th.first{background:var(--sun1);z-index:3}
+  table.grid .nowcol{background:var(--now-soft)}
+  table.grid th.nowcol{background:#CDE8D6}
+  table.grid tr.sec td{background:var(--gold-soft);font-weight:700;color:var(--ink)}
+  table.grid tr.sec td span{position:sticky;left:10px}
+  table.grid td.opencell{background:var(--warn-soft);box-shadow:inset 0 0 0 2px var(--warn)}
+  .gopen{border:0;background:var(--warn);color:#fff;border-radius:8px;padding:4px 8px;font:inherit;font-size:12px;font-weight:800;cursor:pointer;line-height:1.25;text-align:left}
+  .gopen span{display:block;font-weight:600;font-size:11px;opacity:.9}
+  table.grid .nm{background:none;border:0;padding:0;font:inherit;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px}
+  .issue{display:flex;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:14.5px}
+  .issue:first-of-type{border-top:0}
+  .issue .pill{background:var(--warn-soft);color:var(--warn);flex:none;height:fit-content}
+  .linkrow{display:flex;align-items:center;gap:8px;padding:9px 0;border-top:1px solid var(--line)}
+  .linkrow:first-of-type{border-top:0}
+  .vlrow{flex-wrap:wrap}
+  .vlrow .grow{min-width:150px}
+  .vlbtns{display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-start;width:100%}
+  .btn.sendlink{width:100%;margin-top:8px;border:1px solid var(--ink)}
+  .outpill{display:inline-block;font-size:11.5px;font-weight:700;padding:1px 7px;border-radius:999px;background:var(--warn-soft);color:#7A1A14}
+
+  /* ---------- Bottom sheet + map ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(20,24,32,.42);display:none;z-index:20}
+  .scrim.show{display:block}
+  .sheet{visibility:hidden;position:fixed;left:0;right:0;bottom:0;z-index:21;background:#fff;border-radius:22px 22px 0 0;padding:10px 20px calc(22px + env(safe-area-inset-bottom,0px));max-width:560px;margin:0 auto;transform:translateY(105%);transition:transform .22s ease}
+  .sheet.show{transform:none;visibility:visible}
+  .sheet .grab{width:44px;height:5px;border-radius:9px;background:var(--line);margin:0 auto 14px}
+  .sheet .big{font-size:22px;font-weight:700}
+  .sheet .phone{font-size:18px;margin:6px 0 14px;color:var(--muted)}
+  .sheet .btns .btn{flex:1}
+  .mapbox{position:fixed;inset:0;z-index:30;background:#fff;display:none;flex-direction:column}
+  .mapbox.show{display:flex}
+  .mapbox .top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
+  .mapbox .img{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
+  .mapbox img{width:100%;min-width:640px;display:block}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:var(--ink);color:#fff;padding:10px 16px;border-radius:999px;font-size:14px;z-index:40;opacity:0;transition:opacity .2s;pointer-events:none}
+  .toast.show{opacity:1}
+  .tablewrap{overflow-x:auto}
+  table.team{width:100%;border-collapse:collapse;font-size:14.5px}
+  table.team th{text-align:left;font-size:12px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);padding:6px 6px 8px;border-bottom:2px solid var(--line)}
+  table.team td{padding:10px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+  table.team tr:last-child td{border-bottom:0}
+  table.team td.act{text-align:right;white-space:nowrap}
+  footer{padding:10px 0 30px;font-size:12.5px;color:var(--muted);text-align:center}
+</style>
+</head>
+<body>
+  <header class="hero">
+    <div class="wrap">
+      <div class="bar"></div>
+      <h1 id="h-title">&nbsp;</h1>
+      <p class="scripture" id="h-scripture">&nbsp;</p>
+    </div>
+    <div class="sunband">
+      <div class="wrap">
+        <div class="event" id="h-date">&nbsp;</div>
+        <div class="sub" id="h-name"></div>
+        <span class="dept" id="h-dept">Attendant Department</span>
+      </div>
+    </div>
+  </header>
+
+  <main><div class="wrap" id="app"><div class="spinner"></div></div></main>
+  <footer class="wrap" id="foot"></footer>
+
+  <div class="scrim" id="scrim"></div>
+  <div class="sheet" id="sheet"></div>
+  <div class="toast" id="toast"></div>
+  <input id="copybuf" style="position:fixed;left:-9999px;top:0" aria-hidden="true">
+
+<script>
+// This page runs two ways: served by the department's own Apps Script (BOOT is filled in by the server), or from the
+// shared page on GitHub (BOOT is null there, and the department's app ID comes from ?app= in the link).
+const BOOT = (function (b) {
+  if (b) return Object.assign(b, { shared: false });
+  const q = new URLSearchParams(location.search), app = (q.get('app') || '').replace(/[^\w-]/g, '');
+  return { shared: true, app: app, name: q.get('name') || '', code: q.get('code') || '', now: q.get('now') || '', build: '',
+    appUrl: app ? 'https://script.google.com/macros/s/' + app + '/exec' : '', pageUrl: location.origin + location.pathname };
+})(<?!= bootJson ?>);
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const norm = x => String(x || '').toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim();
+const firstLast = n => { const p = String(n).split(','); return p.length > 1 ? (p.slice(1).join(',').trim() + ' ' + p[0].trim()) : n; };
+const initials = n => firstLast(n).split(' ').filter(Boolean).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+const digits = p => { let d = String(p || '').replace(/\D/g, ''); if (d.length === 10) d = '1' + d; return d ? '+' + d : ''; };
+const smsHref = (p, body) => 'sms:' + digits(p) + (body ? '?&body=' + encodeURIComponent(body) : '');
+const telHref = p => 'tel:' + digits(p);
+
+function call(fn, ...args) {
+  if (!BOOT.shared) return new Promise((ok, bad) => google.script.run.withSuccessHandler(ok).withFailureHandler(bad)[fn](...args));
+  if (!BOOT.appUrl) return Promise.reject(new Error('This link is missing its schedule ID. Ask your keyman or the overseers for your current link.'));
+  // a plain-text POST needs no extra permission check from the browser, so it works from GitHub to Google
+  return fetch(BOOT.appUrl, { method: 'POST', body: JSON.stringify({ fn: fn, args: args }) })
+    .then(r => r.json(), () => { throw new Error('Check your signal and try again.'); })
+    .then(d => { if (!d || d.error) throw new Error((d && d.error) || 'Something went wrong. Try again.'); return d.result; });
+}
+/** Someone's personal link: on the shared page it also carries the schedule's app ID. */
+function linkFor(code) {
+  return BOOT.shared ? BOOT.pageUrl + '?app=' + BOOT.app + '&code=' + encodeURIComponent(code) : BOOT.appUrl + '?code=' + encodeURIComponent(code);
+}
+function busy(btn, label) { btn.disabled = true; btn.classList.add('loading'); btn.innerHTML = '<span class="spin"></span>' + label; }
+function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }
+function setUrl(params) {
+  try {
+    if (BOOT.shared) history.replaceState(null, '', '?' + new URLSearchParams(Object.assign({ app: BOOT.app }, params)));
+    else google.script.history.replace(null, params);
+  } catch (e) {}
+}
+function copy(text) {
+  const done = () => toast('Link copied');
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text).then(done, () => fallback());
+  } else fallback();
+  function fallback() {
+    const b = $('#copybuf'); b.value = text; b.select(); b.setSelectionRange(0, 99999);
+    try { if (document.execCommand('copy')) return done(); } catch (e) {}
+    window.prompt('Copy this link:', text);
+  }
+}
+// Everyone's link carries their access code (from the Access Code column on the Master Contact Sheet)
+let LINKS = {};               // normalized "last, first" -> code, for the people this page can send links to
+let VCODE = '';               // the code this volunteer page was opened with
+function personalLink(name) { const c = LINKS[norm(name)]; return c ? linkFor(c) : ''; }
+function docUrl(key) { return BOOT.appUrl + '?doc=' + encodeURIComponent(key); }
+const DOC_ICON = { assign: '🗺', dept: '📍', evac: '🚨' };
+function meetingCard(m) {
+  if (!m) return '';
+  return '<div class="shift meeting"><div class="time">' + esc(m.time) + '</div><div class="grow"><span class="pill mtg">ALL ATTENDANTS</span>' +
+    '<div class="spot">Morning Meeting</div><div class="small">' + esc(m.place) + '</div>' +
+    (m.note ? '<div class="mnote">' + esc(m.note) + '</div>' : '') + '</div></div>';
+}
+// Attendance count times (only the ones overseers have set, and only for people who count)
+// Counters also get a box per counting spot to submit, change, or clear the number.
+// Change / Update / Clear only redraw that one box, so the page never reloads.
+const TALLY = { typed: {}, editing: {}, n: {}, send: null };
+function countCard(counts) {
+  if (!counts || !counts.length) return '';
+  return counts.map(c => '<div class="countbar"><span class="ct">' + esc(c.time) + '</span><span>🧮 ' + esc(c.label) + '</span></div>' +
+    (c.spots || []).map(sp => { const id = c.key + '|' + sp.spot; TALLY.n[id] = sp.n; return '<div class="tallyin" data-tbox="' + esc(id) + '">' + tallyBox(id) + '</div>'; }).join('')).join('');
+}
+function tallyBox(id) {
+  const n = TALLY.n[id], spot = id.slice(id.indexOf('|') + 1);
+  if (n != null && !TALLY.editing[id])
+    return '<span class="lbl">' + esc(spot) + ' count</span><span class="done">✓ ' + Number(n).toLocaleString() + ' sent</span>' +
+      '<button class="btn sm line" data-tedit="' + esc(id) + '">Change</button>';
+  return '<span class="lbl">' + esc(spot) + ' count</span><input type="number" inputmode="numeric" min="0" placeholder="Total" data-tin="' + esc(id) + '" value="' +
+    esc(TALLY.typed[id] != null ? TALLY.typed[id] : (n != null ? n : '')) + '">' +
+    '<button class="btn sm" data-tsend="' + esc(id) + '">' + (n != null ? 'Update' : 'Submit') + '</button>' +
+    (n != null ? '<button class="btn sm line" data-tclear="' + esc(id) + '">Clear</button>' : '');
+}
+// send(req) saves through the right server call for this page
+function bindCountCard(send) {
+  if (send) TALLY.send = send;
+  document.querySelectorAll('[data-tbox]').forEach(bindTallyBox);
+}
+function redrawTally(id) {
+  const box = Array.from(document.querySelectorAll('[data-tbox]')).filter(b => b.dataset.tbox === id)[0];
+  if (box) { box.innerHTML = tallyBox(id); bindTallyBox(box); }
+}
+function bindTallyBox(box) {
+  const id = box.dataset.tbox, i = box.querySelector('[data-tin]');
+  if (i) i.oninput = () => { TALLY.typed[id] = i.value; };
+  const ed = box.querySelector('[data-tedit]'), go = box.querySelector('[data-tsend]'), clr = box.querySelector('[data-tclear]');
+  if (ed) ed.onclick = () => { TALLY.editing[id] = 1; redrawTally(id); const x = box.querySelector('[data-tin]'); if (x) { x.focus(); x.select(); } };
+  const save = (n, btn) => {
+    const count = id.slice(0, id.indexOf('|')), spot = id.slice(id.indexOf('|') + 1);
+    busy(btn, n === '' ? 'Clearing…' : 'Sending…');
+    TALLY.send({ tally: true, count: count, spot: spot, n: n }).then(res => {
+      if (!res.ok) { openSheet('<div class="big">Not sent</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); redrawTally(id); return; }
+      TALLY.n[id] = n === '' ? undefined : Number(n);
+      delete TALLY.typed[id]; delete TALLY.editing[id];
+      toast(n === '' ? 'Count cleared' : 'Count sent'); redrawTally(id);
+    }, e => { openSheet('<div class="big">Not sent</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); redrawTally(id); });
+  };
+  if (go) go.onclick = () => { const n = i.value.trim(); if (!/^\d+$/.test(n)) { toast('Type the count as a number'); return; } save(n, go); };
+  if (clr) clr.onclick = () => save('', clr);
+}
+function alertBox(notes) {
+  return notes.map(n => '<div class="alertnote"><span class="ico">⛔</span><span>' + esc(n.text) + '</span></div>').join('');
+}
+function sectionAlerts(sn, sections) {
+  const out = [];
+  sections.forEach(sec => (sn[sec] || []).forEach(n => { if (n.kind === 'alert') out.push(n); }));
+  return out;
+}
+function docRow(docs) {
+  if (!docs || !docs.length) return '';
+  return '<div class="docrow">' + docs.map(x => '<a class="btn ghost" target="_blank" rel="noopener" href="' + esc(docUrl(x.key)) + '"><span>' +
+    (DOC_ICON[x.key] || '📄') + '</span>' + esc(x.label) + '</a>').join('') + '</div>';
+}
+// "Send link": the text message (and email) with someone's personal schedule link
+function linkable(name) { const rp = rosterOf(name); return !!(rp && rp.pickable && !rp.blocked && LINKS[norm(name)]); }
+function linkText(name) {
+  const day = (L.event || {}).date || 'the assembly';
+  return 'Hey Brother ' + String(name).split(',')[0].trim() + '. Here is a link to your personal assignments as an attendant for ' + day +
+    '. It always shows your latest assignments whenever you refresh the page. Thank you! - ' + personalLink(name) +
+    '\n\nIf the page doesn’t load, open the link in a private/incognito window.';
+}
+function linkMail(name, email) {
+  const day = (L.event || {}).date || 'the assembly';
+  return 'mailto:' + email.trim() + '?' + (L.ccEmails && L.ccEmails.length ? 'cc=' + L.ccEmails.map(x => x.trim()).join(',') + '&' : '') +
+    'subject=' + encodeURIComponent('Your attendant assignments – ' + day) +
+    '&body=' + encodeURIComponent('Hey Brother! Below is a link to your personal schedule throughout the day at the assembly. It contains info about your key man, documents pertaining to your assignment, and the assignment map. This may change throughout the day, so remember to hit the refresh button on this page regularly to see your most current assignments. Thank you for everything!\n\n' + personalLink(name) + '\n\nIf the page doesn’t load, open the link in a private/incognito window.');
+}
+function sendLinkBtn(name, phone, cls) {
+  if (!linkable(name)) return '';
+  return phone ? '<a class="' + cls + '" href="' + smsHref(phone, linkText(name)) + '">💬 Send link</a>'
+               : '<button class="' + cls + '" data-copy="' + esc(personalLink(name)) + '">🔗 Copy link</button>';
+}
+function leaderLink(code) { return linkFor(code); }
+
+/* ---------- time ---------- */
+function parseClock(t) {
+  const m = String(t || '').match(/(\d{1,2}):(\d{2})\s*([AaPp])/); if (!m) return null;
+  let h = Number(m[1]) % 12; if (m[3].toUpperCase() === 'P') h += 12; return h * 60 + Number(m[2]);
+}
+function fmt(min) { const h = Math.floor(min / 60), m = min % 60; return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + ' ' + (h < 12 ? 'AM' : 'PM'); }
+let EVENT = null;
+function nowInfo() {
+  // Returns minutes since midnight if today is the event day, otherwise null
+  if (BOOT.now) return parseClock(BOOT.now);
+  if (!EVENT || !EVENT.iso) return null;
+  const d = new Date();
+  const iso = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  return iso === EVENT.iso ? d.getHours() * 60 + d.getMinutes() : null;
+}
+
+/* ---------- header ---------- */
+function paintHeader(ev) {
+  EVENT = ev;
+  $('#h-title').textContent = ev.title || 'Attendant Schedule';
+  $('#h-scripture').textContent = ev.scripture || '';
+  $('#h-date').textContent = ev.date || '';
+  $('#h-name').textContent = [ev.name, ev.location].filter(Boolean).join(' · ');
+  $('#h-dept').textContent = ev.department || 'Attendant Department';
+  document.title = (ev.department || 'Attendant') + ' Schedule';
+}
+function showError(msg) {
+  $('#app').innerHTML = '<div class="card center"><h3>Something went wrong</h3><p class="muted">' + esc(msg) +
+    '</p><button class="btn" onclick="location.reload()">Try again</button></div>';
+}
+function spin() { $('#app').innerHTML = '<div class="spinner"></div>'; }
+
+/* ---------- bottom sheet ---------- */
+function openSheet(html, mode) {
+  const sh = $('#sheet');
+  sh.className = 'sheet show' + (mode ? ' ' + mode : '');
+  sh.innerHTML = '<div class="grab"></div><button class="xbtn" aria-label="Close" onclick="closeSheet()">✕</button>' + html;
+  sh.scrollTop = 0;
+  $('#scrim').classList.add('show');
+}
+function closeSheet() { $('#sheet').classList.remove('show'); $('#scrim').classList.remove('show'); }
+$('#scrim').onclick = closeSheet;
+
+/* =========================================================
+   HOME — no name list: everyone opens their own link (or types their code)
+   ========================================================= */
+function home(msg) {
+  setUrl({});
+  spin();
+  call('apiHome').then(d => { paintHeader(d.event); codeForm(msg); }, e => showError(e.message));
+}
+
+/* =========================================================
+   VOLUNTEER — one person's day
+   ========================================================= */
+function volunteer(code) {
+  VCODE = String(code || '').trim().toUpperCase();
+  spin(); setUrl({ code: VCODE });
+  call('apiVolunteer', VCODE).then(d => {
+    paintHeader(d.event);
+    if (d.inactive) return paintInactive();
+    if (d.badLink) return codeForm('That link didn’t work. It may have been replaced with a new one. Ask your keyman or the overseers for your current link.');
+    if (d.name) LINKS[norm(d.name)] = VCODE;
+    if (d.blocked) {
+      $('#app').innerHTML = '<div class="card center"><h3>This page isn’t available</h3>' +
+        '<p class="muted">Your assignment doesn’t use a personal schedule page. If you have questions, please contact the attendant overseers.</p></div>';
+      return;
+    }
+    if (!d.found) {
+      $('#app').innerHTML = '<div class="card center"><h3>We couldn’t find “' + esc(d.name) + '”</h3>' +
+        '<p class="muted">You may not be scheduled yet, or your name is spelled differently.</p>' +
+        '</div>';
+      return;
+    }
+    if (d.unassigned) return paintUnassigned(d);
+    const now = nowInfo();
+    const blocks = d.blocks;
+    let curIdx = -1, nextIdx = -1;
+    if (now !== null) {
+      blocks.forEach((b, i) => { const end = b.endMin == null ? 24 * 60 : b.endMin; if (now >= b.startMin && now < end && curIdx < 0) curIdx = i; });
+      nextIdx = blocks.findIndex(b => b.startMin > now);
+    }
+    let status = '';
+    if (now !== null) {
+      if (curIdx >= 0) status = '<div class="status on">● On duty now: ' + esc(blocks[curIdx].spot) + ' · ' + esc(blocks[curIdx].section) + '</div>';
+      else if (nextIdx >= 0) status = '<div class="status next">Up next: ' + esc(blocks[nextIdx].spot) + ' at ' + fmt(blocks[nextIdx].startMin) + '</div>';
+      else status = '<div class="status next">You’re all done for today. Thank you!</div>';
+    }
+    let tl = '', mDone = !d.meeting;
+    blocks.forEach((b, i) => {
+      if (!mDone && d.meeting.min <= b.startMin) { tl += meetingCard(d.meeting); mDone = true; }
+      if (i > 0) {
+        const prevEnd = blocks[i - 1].endMin;
+        if (prevEnd != null && b.startMin > prevEnd) tl += '<div class="gap">Break · ' + fmt(prevEnd) + ' – ' + fmt(b.startMin) + '</div>';
+      }
+      const end = b.endMin == null ? 24 * 60 : b.endMin;
+      const cls = i === curIdx ? 'is-now' : (i === nextIdx && curIdx < 0 ? 'is-next' : (now !== null && now >= end ? 'past' : ''));
+      const badge = i === curIdx ? '<span class="pill now">NOW</span> ' : (cls === 'is-next' ? '<span class="pill next">NEXT</span> ' : '');
+      const parts = b.timeText.split(/\s+[–-]\s+/);
+      // the day's last shift runs past the program: it ends when a keyman or overseer relieves you
+      const last = b.endMin == null && !b.override;
+      const timeHtml = b.override ? esc(b.timeText) : esc(parts[0]) + (last && parts[1] ? '<span class="to">' + esc(parts[1]) + '</span>' : parts[1] ? '<span class="to">to ' + esc(parts[1]) + '</span>' : '');
+      tl += '<div class="shift ' + cls + '"><div class="time">' + timeHtml + '</div><div class="grow">' + badge +
+        '<div class="spot">' + esc(b.spot) + '</div><div class="muted small">' + esc(b.section) + '</div>' +
+        (b.notes ? '<div class="small" style="margin-top:6px">' + esc(b.notes) + '</div>' : '') +
+        (b.instructions ? '<details class="instr"><summary>📋 Shift instructions</summary><div>' + esc(b.instructions) + '</div></details>' : '') +
+        partnersBox(b) +
+        (last && d.lastShiftWarning ? '<div class="stayput">⛔ ' + esc(d.lastShiftWarning) + '</div>' : '') +
+        (b.reducedAfter ? '<div class="relief">✅ <strong>No relief needed.</strong> This spot is being reduced for low traffic, so you can leave it when your shift ends' +
+          (parts[1] ? ' at ' + esc(parts[1]) : '') + '.</div>' : '') +
+        ((d.sectionNotes || {})[b.section] || []).filter(n => n.kind === 'time' && n.time === b.startMin)
+          .map(n => '<div class="note" style="margin-top:8px">📝 ' + esc(n.text) + '</div>').join('') + '</div></div>';
+    });
+    if (!mDone) tl += meetingCard(d.meeting);
+    let notes = '';
+    Object.keys(d.sectionNotes || {}).forEach(sec => d.sectionNotes[sec].forEach(n => { if (n.kind === 'note') notes += '<div class="note"><strong>' + esc(sec) + ':</strong> ' + esc(n.text) + '</div>'; }));
+    const alerts = alertBox(sectionAlerts(d.sectionNotes || {}, Object.keys(d.sectionNotes || {})));
+    const contactRow = c => '<div class="contact"><div class="avatar">' + esc(initials(c.name)) + '</div><div class="grow"><div style="font-weight:600">' +
+      esc(firstLast(c.name)) + '</div><div class="muted small">' + esc(c.role) + '</div></div>' +
+      (c.phone ? '<div class="btns"><a class="btn sm" href="' + smsHref(c.phone) + '">Text</a><a class="btn sm ghost" href="' + telHref(c.phone) + '">Call</a></div>' : '') + '</div>';
+    const mine = d.contacts.filter(c => c.primary), others = d.contacts.filter(c => !c.primary);
+    const contacts = (mine.length ? '<div class="card keyman"><p class="eyebrow">Your keyman · first contact</p>' + mine.map(contactRow).join('') + '</div>' : '') +
+      (others.length ? '<div class="card"><p class="eyebrow">' + (mine.length ? 'Overseers · also available' : 'Questions? Contact') + '</p>' + others.map(contactRow).join('') + '</div>' : '');
+
+    $('#app').innerHTML =
+      '<div class="card"><p class="eyebrow">Schedule for</p><div class="row"><h2 class="grow">' + esc(firstLast(d.name)) + '</h2>' +
+      '<button class="btn sm line" id="refresh">↻ Refresh</button></div>' + docRow(d.docs) + alerts + '</div>' + checkerEntry(d) + status +
+      '<div class="tl">' + tl + countCard(d.counts) + '</div>' + notes +
+      contacts +
+      '<div class="card"><p class="eyebrow">Save this page</p><p class="small muted" style="margin:0 0 10px">This is your personal link. It always shows your latest schedule, even if it changes. Bookmark it or add it to your home screen.</p>' +
+      '<div class="btns"><button class="btn sm" id="copy">Copy my link</button></div></div>';
+    $('#refresh').onclick = () => volunteer(VCODE);
+    bindCountCard(req => call('apiVolunteer', VCODE, req));
+    $('#copy').onclick = () => copy(personalLink(d.name));
+    if ($('#opencheckin')) $('#opencheckin').onclick = () => { paintCheckin($('#app'), () => volunteer(VCODE)); window.scrollTo(0, 0); };
+  }, e => showError(e.message));
+}
+
+// Exteriors: who else is out there during this shift, with Text/Call so they can pair up
+function partnersBox(b) {
+  if (!b.partners) return '';
+  if (!b.partners.length) return '<div class="partners small muted">No one else is scheduled on ' + esc(b.section) + ' with you this shift.</div>';
+  return '<div class="partners"><div class="small" style="font-weight:700;margin-bottom:2px">🤝 Paired with</div>' + b.partners.map(p =>
+    '<div class="prow"><div class="grow"><div style="font-weight:600">' + esc(firstLast(p.name)) + '</div>' + (p.time ? '<div class="small muted">' + esc(p.time) + '</div>' : '') + '</div>' +
+    (p.phone ? '<a class="btn sm" href="' + smsHref(p.phone) + '">Text</a><a class="btn sm ghost" href="' + telHref(p.phone) + '">Call</a>' : '<span class="small muted">No number</span>') + '</div>').join('') + '</div>';
+}
+
+// Badge checkers: a button on their own page that opens Check In/Out
+function checkerEntry(d) {
+  if (!d.checkin) return '';
+  ciInit(d.checkin, { mode: 'checker', name: d.name, code: VCODE, all: false, sections: [] });
+  const r = ciMyRange();
+  return '<div class="card cientry"><p class="eyebrow">🎫 You’re checking in badges</p><p class="small" style="margin:0 0 10px">' +
+    (r ? 'Your last names: <strong>' + esc(r.label) + '</strong>. You can check in anyone.' : 'You can check in anyone.') + '</p>' +
+    '<button class="btn" id="opencheckin" style="width:100%">Open Check In/Out</button></div>';
+}
+
+function paintUnassigned(d) {
+  const rows = d.team.map(t => '<tr><td><strong>' + esc(firstLast(t.name)) + '</strong><div class="small muted">' + esc(t.department) + '</div></td><td class="act">' +
+    (t.phone ? '<a class="btn sm" href="' + smsHref(t.phone) + '">Text</a> <a class="btn sm ghost" href="' + telHref(t.phone) + '">Call</a>' : '') + '</td></tr>').join('');
+  $('#app').innerHTML =
+    '<div class="card"><p class="eyebrow">Schedule for</p><div class="row"><h2 class="grow">' + esc(firstLast(d.name)) + '</h2>' +
+    '<button class="btn sm line" id="refresh">↻ Refresh</button></div>' + docRow(d.docs) + '</div>' +
+    '<div class="status next">There are no shifts assigned to you yet. However, you will be used and filled in for relief, backup, cancellations, etc. – Continue to refresh this page to see updated assignments.</div>' + meetingCard(d.meeting) +
+    '<div class="card"><p class="eyebrow">Oversight &amp; Keymen</p><div class="tablewrap"><table class="team"><thead><tr><th>Name &amp; Department</th><th></th></tr></thead><tbody>' +
+    rows + '</tbody></table></div></div>' +
+    '<div class="card"><p class="eyebrow">Save this page</p><p class="small muted" style="margin:0 0 10px">This is your personal link. If you get assigned a shift, it will show up here.</p>' +
+    '<div class="btns"><button class="btn sm" id="copy">Copy my link</button></div></div>';
+  $('#refresh').onclick = () => volunteer(VCODE);
+  $('#copy').onclick = () => copy(personalLink(d.name));
+}
+
+// Web Settings > Inactivate Schedule Links: Yes
+function paintInactive() {
+  setUrl({});
+  $('#app').innerHTML = '<div class="card center"><h3>Schedule links are no longer active</h3>' +
+    '<p class="muted">The schedule for this event has been closed. Thank you for serving!</p></div>';
+}
+
+/* =========================================================
+   LEADER — keymen & overseers
+   ========================================================= */
+function codeForm(msg) {
+  setUrl({});
+  $('#app').innerHTML = '<div class="card"><p class="eyebrow">My schedule</p><h2>Open your personal link</h2>' +
+    '<p class="muted small" style="margin:6px 0 12px">Use the link the overseers sent you. You can also type the access code from that link here.</p>' +
+    (typeof msg === 'string' ? '<div class="note" style="border-color:var(--warn);background:var(--warn-soft)">' + esc(msg) + '</div>' : '') +
+    '<input type="text" id="code" autocapitalize="characters" autocomplete="off" placeholder="Access code" style="margin-top:10px">' +
+    '<div class="btns" style="margin-top:12px"><button class="btn" id="go">Open my schedule</button></div></div>';
+  $('#go').onclick = () => leader($('#code').value);
+  $('#code').onkeydown = e => { if (e.key === 'Enter') leader($('#code').value); };
+}
+
+let L = null;                 // leader payload
+const UI = { tab: 'schedule', sec: 'ALL', mode: 'time', slot: null };
+let refreshTimer = null;
+
+function leader(code) {
+  spin();
+  call('apiLeader', String(code || '').trim()).then(d => {
+    if (!d.ok) {
+      if (d.volunteer) return volunteer(code);
+      if (!EVENT) call('apiHome').then(h => paintHeader(h.event));
+      if (d.inactive) return paintInactive();
+      return codeForm(d.locked ? 'Too many wrong codes were tried. Please wait 15 minutes.' : 'That link or code didn’t work. It may have been replaced with a new one. Ask your keyman or the overseers for your current link.');
+    }
+    L = d; L.code = String(code).trim().toUpperCase(); LINKS = d.links || {};
+    SEEN_MEM = null; SEEN_REL = null;   // reload what this leader has read from the server
+    applySharedNotes(L);
+    if (SHARED_NOTES === null) loadSharedNotes().then(() => { if (L && SHARED_NOTES) { applySharedNotes(L); paintLeader(); } });
+    paintHeader(d.event);
+    setUrl({ code: L.code });
+    if (UI.slot === null || UI.slot >= d.slots.length) UI.slot = currentSlot();
+    if (UI.sec !== 'ALL' && d.sections.indexOf(UI.sec) < 0) UI.sec = 'ALL';
+    paintLeader();
+    clearInterval(refreshTimer);
+    refreshTimer = setInterval(() => silentRefresh(), 120000);
+  }, e => showError(e.message));
+}
+function silentRefresh() {
+  if (!L || PENDING) return;   // a save is still going; refresh once it finishes
+  const seq = EDITSEQ;
+  call('apiLeader', L.code).then(d => {
+    if (!d.ok) return;
+    whenStill(() => {
+      if (seq !== EDITSEQ || PENDING) return;   // an edit happened meanwhile; this copy is already out of date
+      const c = L.code; L = d; L.code = c; LINKS = d.links || {}; applySharedNotes(L); repaintInPlace();
+    });
+  });
+}
+// Redraw without losing your place: keep where the page and the Full day grid were scrolled to
+function repaintInPlace() { paintLeader(); }
+// Wait until no finger is on the screen and scrolling has stopped. Redrawing mid-swipe
+// swaps the grid out from under the finger, which can leave the page stuck until you swipe sideways.
+let TOUCHING = false, LASTSCROLL = 0;
+document.addEventListener('touchstart', () => { TOUCHING = true; }, { passive: true });
+document.addEventListener('touchend', () => { TOUCHING = false; }, { passive: true });
+document.addEventListener('touchcancel', () => { TOUCHING = false; }, { passive: true });
+document.addEventListener('scroll', () => { LASTSCROLL = Date.now(); }, { passive: true, capture: true });
+function whenStill(fn) {
+  if (TOUCHING || Date.now() - LASTSCROLL < 1500) { setTimeout(() => whenStill(fn), 700); return; }
+  fn();
+}
+
+/* ---------- instant saves: the screen changes right away, the sheet saves in the background ---------- */
+let PENDING = 0, EDITSEQ = 0, SAVETOK = 0;
+function beginSave() { PENDING++; EDITSEQ++; savePill(); }
+function endSave(refresh) { PENDING = Math.max(0, PENDING - 1); savePill(); if (!PENDING && refresh !== false) silentRefresh(); }
+// a small pill at the bottom while a change is still saving, so you know when it's safe to move on
+function savePill() {
+  let p = $('#savepill');
+  if (!p) { p = document.createElement('div'); p.id = 'savepill'; document.body.appendChild(p); }
+  if (PENDING) { p.className = 'show'; p.innerHTML = '<span class="spin"></span>Saving…'; clearTimeout(p.t); }
+  else if (p.className === 'show') { p.innerHTML = '✓ Saved'; clearTimeout(p.t); p.t = setTimeout(() => { p.className = ''; }, 1500); }
+}
+// warn before closing the page while something is still saving (phones may skip this)
+window.addEventListener('beforeunload', e => { if (PENDING) { e.preventDefault(); e.returnValue = 'A change is still saving.'; } });
+function snapL() { return JSON.stringify({ rows: L.rows, roster: L.roster, people: L.people }); }
+function restoreL(snap) { Object.assign(L, JSON.parse(snap)); }
+function sheetShowing(id) { return $('#sheet').classList.contains('show') && document.getElementById(id); }
+function notSaved(msg) {
+  openSheet('<div class="big" style="color:var(--warn)">⚠ Not saved</div><p>' + esc(msg) + '</p><p class="small muted">The schedule has been put back the way it was.</p>' +
+    '<button class="btn" style="width:100%" onclick="closeSheet()">OK</button>');
+}
+
+// Apply a swap/fill/remove to the page's own copy of the schedule (same rules as the server)
+function applyEditLocal(r, k, oldName, newName) {
+  const now = r.cells[k] || [];
+  let names = now.filter(n => !oldName || norm(n) !== norm(oldName));
+  if (newName) { const at = now.map(norm).indexOf(norm(oldName)); if (oldName && at >= 0) names.splice(Math.min(at, names.length), 0, newName); else names.push(newName); }
+  r.cells[k] = names;
+  r.allDay = false;   // the server writes an all-day row out slot by slot
+  const tag = r.spot + ' · ' + r.section, sl = L.slots[k];
+  if (oldName) {
+    const rp = rosterOf(oldName);
+    if (rp && rp.busy[k] != null) { const left = String(rp.busy[k]).split(' + ').filter(x => x !== tag); if (left.length) rp.busy[k] = left.join(' + '); else delete rp.busy[k]; }
+    const pp = (L.people || []).filter(p => norm(p.name) === norm(oldName))[0];
+    if (pp) pp.blocks = pp.blocks.map(b => Object.assign({}, b, { cells: (b.cells || []).filter(c => !(c[0] === r.id && c[1] === k)) })).filter(b => b.cells.length);
+    if (pp && !pp.blocks.length) L.people = L.people.filter(p => p !== pp);
+  }
+  if (newName) {
+    let rp = rosterOf(newName);
+    if (rp) rp.busy[k] = rp.busy[k] != null ? rp.busy[k] + ' + ' + tag : tag;
+    let pp = (L.people || []).filter(p => norm(p.name) === norm(newName))[0];
+    if (!pp) { pp = { name: newName, blocks: [] }; L.people.push(pp); L.people.sort((a, b) => a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1); }
+    pp.blocks.push({ timeText: r.override || (sl.label + (sl.end != null ? ' – ' + fmt(sl.end) : '')), spot: r.spot, section: r.section, startMin: sl.start, endMin: sl.end, cells: [[r.id, k]] });
+    pp.blocks.sort((a, b) => a.startMin - b.startMin);
+  }
+}
+function currentSlot() {
+  const now = nowInfo();
+  if (now === null || !L) return 0;
+  let idx = 0;
+  L.slots.forEach((s, i) => { if (now >= s.start) idx = i; });
+  return idx;
+}
+function liveSlot() {
+  const now = nowInfo(); if (now === null || !L) return -1;
+  let idx = -1; L.slots.forEach((s, i) => { if (now >= s.start) idx = i; }); return idx;
+}
+
+/* ---------- "Read" tracking for Conflicts and What's new ----------
+   Saved on the server for each leader (L.seen), because browsers inside Apps Script
+   can lose their saved data. This phone/computer's storage is only a backup. */
+let SEEN_MEM = null;   // short ids of the conflicts already seen
+function saveSeen(data) { call('apiMarkSeen', L.code, data).catch(() => {}); }
+function seenId(k) { let h = 5381; for (let i = 0; i < k.length; i++) h = ((h << 5) + h + k.charCodeAt(i)) | 0; return (h >>> 0).toString(36); }
+function conflictKeys() {
+  const k = [];
+  (L.issues || []).forEach(i => { if (!(i.type === 'Double-booked' && i.ignored)) k.push(issueKey(i)); });
+  (L.cancelled || []).forEach(c => k.push(cancelKey(c)));
+  return k;
+}
+function issueKey(i) { return 'i|' + i.type + '|' + (i.key || i.text); }
+function cancelKey(c) { return 'c|' + norm(c.name) + '|' + c.when; }
+function seenSet() {
+  if (!SEEN_MEM) {
+    let local = [];
+    try { local = JSON.parse(localStorage.getItem('attSeenConflicts') || '[]'); } catch (e) {}
+    // older versions saved full conflict keys here; turn them into short ids
+    local = (Array.isArray(local) ? local : []).map(k => /^[ic]\|/.test(k) ? seenId(k) : String(k));
+    const server = (L.seen && L.seen.conflicts) || null;
+    SEEN_MEM = server ? server.concat(local.filter(x => server.indexOf(x) < 0)) : local;
+    if (!server && local.length) saveSeen({ conflicts: SEEN_MEM });   // first time: copy this browser's list to the server
+  }
+  return SEEN_MEM;
+}
+function markConflictsSeen(keys) {
+  const ids = keys.map(seenId);
+  const same = ids.length === seenSet().length && ids.every(x => SEEN_MEM.indexOf(x) >= 0);
+  SEEN_MEM = ids;
+  try { localStorage.setItem('attSeenConflicts', JSON.stringify(ids)); } catch (e) {}
+  if (!same) saveSeen({ conflicts: ids });
+}
+
+/* ---------- Shared release notes ----------
+   One notes file on the shared page serves every copy. If it can't be reached, the page keeps the notes from this
+   schedule's own Release Notes tab. Overseers also learn when their copy's server code is older than the newest. */
+const NOTES_URL = 'https://volunteer-schedule.github.io/releases.json';
+let SHARED_NOTES = null;   // null = not tried yet, false = not available, else the file
+function loadSharedNotes() {
+  if (SHARED_NOTES !== null) return Promise.resolve(SHARED_NOTES);
+  return fetch(BOOT.shared ? 'releases.json' : NOTES_URL, { cache: 'no-cache' })
+    .then(r => (r.ok ? r.json() : null)).catch(() => null)
+    .then(j => (SHARED_NOTES = j && Array.isArray(j.releases) ? j : false));
+}
+function verNewer(a, b) {   // is version a newer than b? ("1.10" > "1.9")
+  const x = String(a || '0').split('.').map(n => parseInt(n, 10) || 0), y = String(b || '0').split('.').map(n => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0);
+  return false;
+}
+function applySharedNotes(d) {
+  if (!d || !SHARED_NOTES) return;
+  d.releases = SHARED_NOTES.releases.map(r => ({ version: r.version, date: r.date || '', title: r.title || '',
+    items: (r.items || []).filter(i => d.me.all || i.audience !== 'Overseers').map(i => ({ type: i.type, note: i.note })) }))
+    .filter(r => r.items.length);
+  d.updateAvailable = d.me.all && verNewer(SHARED_NOTES.latestServer, d.appVersion) ? SHARED_NOTES.latestServer : '';
+}
+function updateNotice(d) {
+  if (!d.updateAvailable) return '';
+  return '<div class="note" style="margin-top:10px">⬆ A newer version of the schedule app is ready for your copy (yours: ' + esc(d.appVersion || 'older') +
+    ', newest: ' + esc(d.updateAvailable) + '). <a href="https://volunteer-schedule.github.io/update.html" target="_blank" rel="noopener">How to update</a></div>';
+}
+
+/* ---------- What's new ---------- */
+let SEEN_REL = null;   // newest version this leader has opened
+function releaseUnseen(rel) {
+  if (!rel || !rel.length) return false;
+  if (SEEN_REL === null) {
+    let local = '';
+    try { local = localStorage.getItem('attSeenRelease') || ''; } catch (e) {}
+    const server = (L.seen && L.seen.release) || '';
+    SEEN_REL = server || local;
+    if (!server && local) saveSeen({ release: local });   // first time: copy this browser's value to the server
+  }
+  return SEEN_REL !== rel[0].version;
+}
+// Big gold banner only while the newest notes are unread; after that it's a small link on the "Updated" line
+function whatsNewRow(rel) {
+  if (!releaseUnseen(rel)) return '';
+  const top = rel[0], unseen = true;
+  return '<button class="wnrow' + (unseen ? ' unseen' : '') + '" id="wnbtn"><span style="font-size:18px">✨</span><div class="grow"><strong>What’s new</strong> · v' + esc(top.version) +
+    (top.title ? ' — ' + esc(top.title) : '') + '</div>' + (unseen ? '<span class="newpill" style="margin:0">NEW</span>' : '') + '<span class="chev">›</span></button>';
+}
+function openWhatsNew() {
+  const rel = L.releases || [];
+  if (!rel.length) return;
+  const wasUnseen = releaseUnseen(rel);
+  SEEN_REL = rel[0].version;
+  try { localStorage.setItem('attSeenRelease', rel[0].version); } catch (e) {}
+  if (wasUnseen) saveSeen({ release: rel[0].version });
+  const icons = { New: '✨ New', Improved: '👍 Improved', Fixed: '🐞 Fixed' };
+  const block = r => '<div class="wnver"><strong>Version ' + esc(r.version) + (r.title ? ' — ' + esc(r.title) : '') + '</strong>' +
+    (r.date ? '<div class="small muted">' + esc(r.date) + '</div>' : '') +
+    ['New', 'Improved', 'Fixed'].map(t => { const it = r.items.filter(i => i.type === t); return it.length ? '<div class="wngroup">' + icons[t] + '</div><ul class="wnlist">' +
+      it.map(i => '<li>' + esc(i.note) + '</li>').join('') + '</ul>' : ''; }).join('') + '</div>';
+  openSheet('<div class="big">What’s new</div><p class="muted small" style="margin:4px 0 14px">Recent updates to the attendant schedule pages.</p>' +
+    block(rel[0]) + (rel.length > 1 ? '<div id="wnolder"><button class="btn line sm" style="width:100%;margin-top:14px" id="wnmore">Show earlier updates</button></div>' : '') +
+    '<button class="btn line" style="width:100%;margin-top:14px" onclick="closeSheet()">Close</button>');
+  if ($('#wnmore')) $('#wnmore').onclick = () => { $('#wnolder').innerHTML = rel.slice(1).map(block).join(''); };
+  if (wasUnseen) paintLeader();   // shrink the banner to the small link
+}
+
+// Redraw the leader page without losing your place: the page and the Full day grid stay scrolled where they were
+function paintLeader() {
+  const g = $('.gridwrap'), gx = g ? g.scrollLeft : 0, gy = g ? g.scrollTop : 0, y = window.scrollY, tab = UI.tab, mode = UI.mode;
+  drawLeader();
+  if (UI.tab !== tab || UI.mode !== mode) return;   // switched tabs or views: start fresh
+  const n = $('.gridwrap');
+  if (n && g) { n.scrollLeft = gx; n.scrollTop = gy; }
+  window.scrollTo(0, y);
+}
+function drawLeader() {
+  const d = L, me = d.me;
+  const issues = d.issues || [];
+  const dups = issues.filter(i => i.type === 'Double-booked' && !i.ignored).length;
+  const unrev = (d.changes || []).filter(c => c.role === 'Keyman' && !c.reviewed).length;
+  let html = '<div class="card"><div class="row"><div class="avatar">' + esc(initials(me.name)) + '</div><div class="grow"><div style="font-weight:700;font-size:17px">' +
+    esc(firstLast(me.name)) + '</div><div class="muted small">' + esc(me.role) + (me.all ? ' · All sections' : ' · ' + esc(me.sections.join(', '))) + '</div></div>' +
+    '<button class="btn sm line" id="refresh">↻</button></div><div class="small muted" style="margin-top:8px">Updated ' + esc(d.loadedAt) +
+    ' · refreshes every 2 minutes' + (d.releases && d.releases.length && !releaseUnseen(d.releases) ? ' · <button class="wnlink" id="wnlink">✨ What’s new</button>' : '') + '</div>' + docRow(d.docs) + whatsNewRow(d.releases) + updateNotice(d) + (me.all ? '' : alertBox(sectionAlerts(d.sectionNotes || {}, d.sections))) + '</div>';
+
+  if (me.all && dups) {
+    html += '<div class="alertbar" id="dupbar">⚠ ' + dups + ' double-booking' + (dups > 1 ? 's' : '') + ' found on the schedule — tap to review</div>';
+  }
+  if (me.all && unrev) {
+    html += '<div class="changebar" id="chgbar">✎ ' + unrev + ' change' + (unrev > 1 ? 's' : '') + ' made by keymen — tap to review</div>';
+  }
+
+  if (!me.all) html += meetingCard(d.meeting) + countCard(d.counts);
+  if (me.all && (!d.features || d.features.counts)) html += countEditor(d.counts || []);
+
+  if (d.myBlocks && d.myBlocks.length) {
+    html += '<div class="card"><p class="eyebrow">Your own shifts</p>' + d.myBlocks.map(b =>
+      '<div class="spotrow"><div class="sp">' + esc(b.timeText.split(/\s+[–-]\s+/)[0]) + '</div><div><strong>' + esc(b.spot) + '</strong> <span class="muted small">' +
+      esc(b.section) + (b.override ? '' : ' · ' + esc(b.timeText)) + '</span>' +
+      (b.instructions ? '<details class="instr"><summary>📋 Shift instructions</summary><div>' + esc(b.instructions) + '</div></details>' : '') + partnersBox(b) + '</div></div>').join('') + '</div>';
+  }
+  if (!me.all) html += teamInstructions(d);
+
+  let unread = 0;
+  if (me.all) {
+    const keys = conflictKeys(), seen = seenSet();
+    const fresh = keys.filter(k => seen.indexOf(seenId(k)) < 0);
+    if (UI.tab === 'issues') {
+      // looking at the Conflicts tab marks everything as read; keep "NEW" tags until you leave the tab
+      UI.newConflicts = (UI.newConflicts || []).concat(fresh);
+      markConflictsSeen(keys);
+    } else {
+      UI.newConflicts = [];
+      unread = fresh.length;
+    }
+  }
+  if (UI.tab === 'links') UI.tab = 'contacts';   // Send links is now part of the Volunteer List
+  if (UI.tab === 'checkin' && !d.checkin) UI.tab = 'schedule';   // badge check-in switched off on Web Settings
+  const ciTab = d.checkin ? 'checkin' : '';
+  if (me.all) {
+    const tab = (k, label) => '<button data-tab="' + k + '" class="' + (UI.tab === k ? 'on ' : '') + (k === 'issues' && unread ? 'alert' : '') + '">' + label + '</button>';
+    const anyConflicts = conflictKeys().length > 0;
+    html += '<div class="tabs">' + tab('schedule', 'Schedule') +
+      tab('issues', unread ? 'Conflicts <span class="redbadge">' + unread + '</span>' : (anyConflicts ? 'Conflicts' : 'Conflicts ✓')) +
+      tab('changes', 'Changes' + (unrev ? ' <span class="goldbadge">' + unrev + '</span>' : '')) +
+      tab('contacts', 'Volunteer List') + (ciTab ? tab('checkin', 'Check In/Out') : '') + '</div>';
+  } else {
+    if (UI.tab !== 'contacts' && UI.tab !== 'checkin') UI.tab = 'schedule';
+    const tab = (k, label) => '<button data-tab="' + k + '" class="' + (UI.tab === k ? 'on' : '') + '">' + label + '</button>';
+    html += '<div class="tabs">' + tab('schedule', 'Schedule') + tab('contacts', 'Volunteer List') + (ciTab ? tab('checkin', 'Check In/Out') : '') + '</div>';
+  }
+  html += '<div id="pane"></div>';
+  $('#app').innerHTML = html;
+  $('#refresh').onclick = () => leader(L.code);
+  bindCountEditor();
+  bindCountCard(req => call('apiEdit', L.code, req));
+  if ($('#wnbtn')) $('#wnbtn').onclick = openWhatsNew;
+  if ($('#wnlink')) $('#wnlink').onclick = openWhatsNew;
+  if ($('#dupbar')) $('#dupbar').onclick = () => { UI.tab = 'issues'; drawLeader(); };
+  if ($('#chgbar')) $('#chgbar').onclick = () => { UI.tab = 'changes'; drawLeader(); };
+  document.querySelectorAll('.tabs button').forEach(b => b.onclick = () => { UI.tab = b.dataset.tab; drawLeader(); });
+  ciInit(d.checkin, { mode: 'leader', name: me.name, all: me.all, sections: me.sections });
+  if (UI.tab !== 'checkin') ciStop();
+  if (UI.tab === 'schedule') paintSchedule();
+  else if (UI.tab === 'checkin') paintCheckin($('#pane'));
+  else if (UI.tab === 'issues') paintIssues();
+  else if (UI.tab === 'changes') paintChanges();
+  else paintContacts();
+}
+
+function rowsInView() { return L.rows.filter(r => UI.sec === 'ALL' || r.section === UI.sec); }
+// open = nobody there, not marked "No shift needed", and not an early slot like 6:45 / 7:15
+// (unless someone was removed or cancelled from that early spot)
+function isOpenCell(r, i) {
+  return ((L.noOpenSlots || []).indexOf(i) < 0 || (L.vacated || []).some(v => v[0] === r.id && v[1] === i)) && !(r.cells[i] || []).length && (r.closed || []).indexOf(i) < 0 && !unschedAt(r, i) && !reducedAt(r, i);
+}
+// spot cut back for low traffic at slot i (only while nobody is in it, "No shift needed" or not)
+function reducedAt(r, i) {
+  if (!r || !L.slots[i] || (r.cells[i] || []).length) return null;
+  return (L.reduced || []).filter(u => norm(u.section) === norm(r.section) && norm(u.pos) === norm(r.pos) && u.time === L.slots[i].label)[0] || null;
+}
+// "Leave unscheduled" entry covering this empty spot at slot i (only while it's still empty)
+function unschedAt(r, i) {
+  if ((r.cells[i] || []).length || (r.closed || []).indexOf(i) >= 0) return null;
+  return (L.unscheduled || []).filter(u => norm(u.section) === norm(r.section) && norm(u.pos) === norm(r.pos) &&
+    (u.time === 'All day' || u.time === L.slots[i].label)).sort((a, b) => (a.time === 'All day') - (b.time === 'All day'))[0] || null;
+}
+// open spots always show; this red bar just says how many there are
+function openBar(n, what) {
+  return '<div class="openbar"><span class="grow">⚠ Open spots<span class="sub">' + (n === 1 ? '1 spot needs' : n + ' spots need') + ' to be filled ' + what + '</span></span>' +
+    '<span class="cnt">' + n + '</span></div>';
+}
+
+// Label for a time slot: use the Time Override (e.g. "12:00 PM until baptism ends") when every spot shown in it has the same one
+function slotLabel(i, rows) {
+  const on = rows.filter(r => (r.cells[i] || []).length);
+  if (on.length && on.every(r => r.override && r.override === on[0].override)) return on[0].override;
+  return L.slots[i].label;
+}
+
+// Keymen: the same shift instructions their volunteers see, one tap-to-open box per kind of spot.
+// Instructions already shown on the keyman's own shifts aren't repeated here.
+function teamInstructions(d) {
+  const mine = (d.myBlocks || []).map(b => b.instructions).filter(Boolean);
+  const byText = {};
+  (d.rows || []).forEach(r => {
+    if (!r.instructions || mine.indexOf(r.instructions) >= 0) return;
+    const e = byText[r.instructions] = byText[r.instructions] || { spots: [], text: r.instructions };
+    if (e.spots.indexOf(r.spot) < 0) e.spots.push(r.spot);
+  });
+  const list = Object.keys(byText).map(k => byText[k]);
+  if (!list.length) return '';
+  return '<div class="card"><p class="eyebrow">Shift instructions for your team</p><p class="small muted" style="margin:0 0 6px">What your volunteers see on these spots.</p>' +
+    list.map(e => '<details class="instr"><summary>📋 ' + esc(e.spots.join(', ')) + '</summary><div>' + esc(e.text) + '</div></details>').join('') + '</div>';
+}
+
+// Overseers: set the morning/afternoon count times on the day. Nobody sees a count until its time is set.
+function countEditor(counts) {
+  const val = c => { if (c.min == null) return ''; const h = Math.floor(c.min / 60), m = c.min % 60; return (h < 10 ? '0' : '') + h + ':' + (m < 10 ? '0' : '') + m; };
+  const summary = counts.map(c => (c.key === 'am' ? 'AM ' : 'PM ') + (c.min == null ? 'not set' : c.time) +
+    (c.reported ? ' – ' + c.total.toLocaleString() + ' (' + c.reported + '/' + c.tally.length + ')' : '')).join(' · ');
+  const head = '<button class="collhead" id="cttoggle" aria-expanded="' + !!UI.ctOpen + '"><span class="grow"><span class="eyebrow" style="margin:0">Attendance counts</span>' +
+    '<span class="small muted" style="display:block">' + esc(summary) + '</span></span><span class="plus">' + (UI.ctOpen ? '−' : '+') + '</span></button>';
+  if (!UI.ctOpen) return '<div class="card">' + head + '</div>';
+  return '<div class="card">' + head + '<p class="small muted" style="margin:10px 0 10px">Set each time when you know it. Only spots ' + esc(L.countSpotsText || 'listed under Attendance Count Spots') + ' on duty at that time and their keymen will see it. Until a time is set, no one sees it. Once it’s set, each counter types their spot’s total on their page and it shows below.</p>' +
+    counts.map(c => '<div class="countrow"><label class="grow" for="ct-' + c.key + '"><strong>' + (c.key === 'am' ? 'Morning' : 'Afternoon') + '</strong><div class="small muted">' + (c.min == null ? 'Not set · hidden' : 'Showing') + '</div></label>' +
+      '<input type="time" id="ct-' + c.key + '" value="' + esc(UI.ct && UI.ct[c.key] != null ? UI.ct[c.key] : val(c)) + '">' +
+      (c.min == null ? '' : '<button class="btn sm line" data-ctclear="' + c.key + '">Clear</button>') + '</div>').join('') +
+    '<button class="btn" id="ctsave" style="width:100%;margin-top:10px">Save count times</button>' +
+    counts.filter(c => c.min != null || c.reported).map(c => '<div class="tallylist"><h4>' + (c.key === 'am' ? 'Morning' : 'Afternoon') + ' count</h4>' +
+      '<p class="small muted" style="margin:0 0 4px">' + c.reported + ' of ' + c.tally.length + ' in. Tap a spot to fix its number or text the brother counting it.</p>' +
+      c.tally.map(t => '<button class="tallyrow" data-tfix="' + c.key + '|' + esc(t.spot) + '"><span><strong>' + esc(t.spot) + '</strong>' +
+        (t.by ? '<span class="small muted" style="display:block">' + esc(firstLast(t.by)) + ' · ' + esc(t.when.split(' ').slice(1).join(' ')) + '</span>' :
+          t.area ? '<span class="small muted" style="display:block">Keyman’s count</span>' : '') + '</span>' +
+        (t.n != null ? '<span class="n">' + t.n.toLocaleString() + '</span>' : '<span class="n miss">not in yet</span>') + '</button>').join('') +
+      '<div class="tallytotal"><span>Total</span><span>' + c.total.toLocaleString() + '</span></div></div>').join('') + '</div>';
+}
+// Who is responsible for this count, with a Text button that has a reminder ready to send
+function countWho(t, ck) {
+  const who = t.who || [];
+  if (!who.length) return '<p class="small muted" style="margin:14px 0 0">' + (t.area ? 'No keyman is listed for this area.' : 'No one is scheduled at this spot at the count time.') + '</p>';
+  const c = (L.counts || []).filter(x => x.key === ck)[0] || {};
+  const msg = p => 'Hi ' + firstLast(p.name).split(' ')[0] + ', please send in the ' + (ck === 'am' ? 'morning' : 'afternoon') + ' attendance count for ' + t.spot +
+    (c.time ? ' (' + c.time + ' count)' : '') + '. You can enter it on your schedule page. Thanks!';
+  return '<p class="eyebrow" style="margin:16px 0 6px">' + (t.area ? 'Keyman counting this area' : 'Counting at ' + esc(c.time || 'the count time')) + '</p>' + who.map(p =>
+    '<div class="contact"><div class="avatar">' + esc(initials(p.name)) + '</div><div class="grow" style="font-weight:600">' + esc(firstLast(p.name)) + '</div>' +
+    (p.phone ? '<div class="btns"><a class="btn sm" href="' + smsHref(p.phone, t.n == null ? msg(p) : '') + '">💬 Text</a><a class="btn sm ghost" href="' + telHref(p.phone) + '">Call</a></div>' : '<span class="small muted">No number</span>') + '</div>').join('');
+}
+// Overseers: type in or fix one spot's number (e.g. reported by radio)
+function openTallyFix(id) {
+  const ck = id.slice(0, id.indexOf('|')), spot = id.slice(id.indexOf('|') + 1);
+  const t = ((L.counts || []).filter(c => c.key === ck)[0].tally || []).filter(x => x.spot === spot)[0] || {};
+  openSheet('<div class="big">' + esc(spot) + ' · ' + (ck === 'am' ? 'Morning' : 'Afternoon') + ' count</div>' +
+    (t.by ? '<p class="small muted">Last entered by ' + esc(firstLast(t.by)) + ' at ' + esc(t.when) + '</p>' : '<p class="small muted">Not in yet.</p>') +
+    '<input class="tallynum" type="number" inputmode="numeric" min="0" id="tfixn" value="' + (t.n != null ? t.n : '') + '" placeholder="Total" style="width:100%;margin:6px 0 12px">' +
+    '<button class="btn" id="tfixsave" style="width:100%">Save</button>' +
+    (t.n != null ? '<button class="btn line" id="tfixclear" style="width:100%;margin-top:8px">Clear this count</button>' : '') + countWho(t, ck));
+  const save = (n, btn) => {
+    if (n !== '' && !/^\d+$/.test(n)) { toast('Type the count as a number'); return; }
+    busy(btn, 'Saving…');
+    call('apiEdit', L.code, { tally: true, count: ck, spot: spot, n: n }).then(res => {
+      if (!res.ok) { openSheet('<div class="big">Not saved</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); return; }
+      closeSheet(); toast(n === '' ? 'Count cleared' : 'Count saved'); silentRefresh();
+    }, e => openSheet('<div class="big">Not saved</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+  };
+  $('#tfixsave').onclick = () => save($('#tfixn').value.trim(), $('#tfixsave'));
+  if ($('#tfixclear')) $('#tfixclear').onclick = () => save('', $('#tfixclear'));
+}
+function bindCountEditor() {
+  if ($('#cttoggle')) $('#cttoggle').onclick = () => { UI.ctOpen = !UI.ctOpen; paintLeader(); };
+  document.querySelectorAll('[data-tfix]').forEach(b => b.onclick = () => openTallyFix(b.dataset.tfix));
+  if (!$('#ctsave')) return;
+  const toText = v => { if (!v) return ''; const [h, m] = v.split(':').map(Number); return fmt(h * 60 + m); };
+  const save = (req, btn) => {
+    busy(btn, 'Saving…');
+    call('apiEdit', L.code, Object.assign({ counts: true }, req)).then(res => {
+      if (!res.ok) { openSheet('<div class="big">Not saved</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); silentRefresh(); return; }
+      UI.ct = {}; toast('Count times saved'); silentRefresh();
+    }, e => openSheet('<div class="big">Not saved</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+  };
+  // keep what's typed if the page auto-refreshes before Save
+  ['am', 'pm'].forEach(k => { const i = $('#ct-' + k); if (i) i.oninput = () => { UI.ct = UI.ct || {}; UI.ct[k] = i.value; }; });
+  $('#ctsave').onclick = () => save({ am: toText($('#ct-am').value), pm: toText($('#ct-pm').value) }, $('#ctsave'));
+  document.querySelectorAll('[data-ctclear]').forEach(b => b.onclick = () => { const r = {}; r[b.dataset.ctclear] = ''; save(r, b); });
+}
+
+function paintSchedule() {
+  const d = L, live = liveSlot();
+  let h = '';
+  if (d.sections.length > 1) {
+    h += '<div class="chips">' + ['ALL'].concat(d.sections).map(s => '<button class="chip ' + (UI.sec === s ? 'on' : '') + '" data-sec="' + esc(s) + '">' +
+      (s === 'ALL' ? 'All sections' : esc(s)) + '</button>').join('') + '</div>';
+  }
+  const seg = (k, label) => '<button data-mode="' + k + '" class="' + (UI.mode === k ? 'on' : '') + '">' + label + '</button>';
+  h += '<div class="row" style="margin-bottom:10px"><div class="grow"></div><div class="seg">' + seg('time', 'By time') + seg('grid', 'Full day') + seg('person', 'By person') + '</div></div>';
+
+  // Only spots that have someone scheduled, and only the time slots that are used (someone on duty, or a spot to fill)
+  const vr = rowsInView().filter(r => r.cells.some(c => c.length));
+  const used = d.slots.map((s, i) => i).filter(i => vr.some(r => (r.cells[i] || []).length) || rowsInView().some(r => isOpenCell(r, i)));
+
+  if (UI.mode === 'person') {
+    h += '<input type="search" id="pq" placeholder="Type a name…" autocomplete="off" value="' + esc(UI.pq || '') + '"><div id="plist" style="margin-top:12px"></div>';
+  } else if (!used.length) {
+    h += '<div class="card center muted">Nothing is scheduled here yet.</div>';
+  } else {
+    if (used.indexOf(UI.slot) < 0) {
+      const pick = used.filter(i => i <= Math.max(live, 0)).pop();
+      UI.slot = pick != null ? pick : used[0];
+    }
+    if (UI.mode === 'time') {
+      h += '<div class="slots">' + used.map(i => '<button class="slot ' + (UI.slot === i ? 'on' : '') + '" data-slot="' + i + '">' +
+        (i === live ? '<small>NOW</small>' : '') + esc(slotLabel(i, vr)) + '</button>').join('') + '</div>';
+      const k = UI.slot, sl = d.slots[k], lab = slotLabel(k, vr);
+      const nk = used[used.indexOf(k) + 1];
+      h += lab !== sl.label
+        ? '<p class="small muted" style="margin:0 0 10px">Showing who is on duty <strong>' + esc(lab) + '</strong>.</p>'
+        : '<p class="small muted" style="margin:0 0 10px">Showing who is on duty from <strong>' + esc(sl.label) + '</strong> to <strong>' + esc(sl.end != null ? fmt(sl.end) : 'end of program') + '</strong>.</p>';
+      const openRows = rowsInView().filter(r => isOpenCell(r, k));
+      if (openRows.length) h += openBar(openRows.length, 'at this time');
+      // keep the schedule's own order, with open spots in their place (e.g. 3B right after 3)
+      const bySec = {};
+      rowsInView().filter(r => (r.cells[k] || []).length || isOpenCell(r, k) || unschedAt(r, k) || reducedAt(r, k))
+        .forEach(r => (bySec[r.section] = bySec[r.section] || []).push(r));
+      Object.keys(bySec).forEach(sec => {
+        const leads = (d.sectionLeads[sec] || []).map(firstLast).join(', ');
+        h += '<div class="card"><div class="sec-head"><h3>' + esc(sec) + '</h3><span class="lead">' + (leads ? 'Keyman: ' + esc(leads) : '') + '</span></div>' +
+          (d.sectionNotes[sec] || []).map(n =>
+            n.kind === 'alert' ? (d.me.all ? alertBox([n]) : '') :
+            n.kind === 'time' ? (n.time === sl.start ? '<div class="note" style="margin:0 0 8px">📝 ' + esc(n.text) + '</div>' : '') :
+            '<div class="note" style="margin:0 0 8px">' + esc(n.text) + '</div>').join('');
+        bySec[sec].forEach(r => {
+          const names = r.cells[k] || [];
+          if (reducedAt(r, k)) {
+            h += '<div class="spotrow unsched" data-red="' + r.id + '" data-rslot="' + k + '"><div class="sp">' + esc(r.spot) + '</div><div><span class="redpill">↓ Reduced Staffing-Low Traffic</span>' +
+              '<span class="unschednote">Not scheduled because traffic is low. The brother before leaves at the end of his shift.</span></div></div>';
+            return;
+          }
+          const un = unschedAt(r, k);
+          if (un) {
+            h += '<div class="spotrow unsched" data-un="' + r.id + '" data-uslot="' + k + '"><div class="sp">' + esc(r.spot) + '</div><div><span class="unschedpill">⊘ Not scheduled</span>' +
+              '<span class="unschednote">ⓘ ' + esc(un.note) + '</span></div></div>';
+            return;
+          }
+          if (!names.length) {
+            h += '<div class="spotrow openspot"><div class="sp">' + esc(r.spot) + '</div><div class="who"><span class="openpill">⚠ OPEN</span>' +
+              '<button class="btn sm fill" data-fill="' + r.id + '" data-fslot="' + k + '">+ Fill</button><button class="btn sm ign" data-ign-open="' + r.id + '" data-islot="' + k + '">Ignore</button></div></div>';
+            return;
+          }
+          const next = nk != null ? (r.cells[nk] || []) : [];
+          const changes = next.length && next.join('|') !== names.join('|');
+          h += '<div class="spotrow"><div class="sp">' + esc(r.spot) + (r.override && lab === sl.label ? '<small>' + esc(r.override) + '</small>' : (r.allDay ? '<small>All day</small>' : '')) + '</div><div class="who">' +
+            names.map(n => personBtn(n, r, k)).join('') +
+            (reducedAt(r, k + 1) ? '<div class="nextup">↓ Reduced after this shift (low traffic). No relief, can leave at ' + esc(fmt(L.slots[k + 1].start)) + '.</div>' :
+             changes ? '<div class="nextup">Next (' + esc(slotLabel(nk, vr)) + '): ' + next.map(n => esc(firstLast(n))).join(', ') + '</div>' : '') + '</div></div>';
+        });
+        // spots with "No shift needed" on the sheet at this time: closed until tapped (the list can be long),
+        // then tap a spot to see why or reopen it. Stays open or closed through refreshes.
+        const cl = rowsInView().filter(r => r.section === sec && closedAt(r, k));
+        const clKey = sec + '|' + k;
+        if (cl.length) h += '<details class="closedline" data-clkey="' + esc(clKey) + '"' + ((UI.clOpen || {})[clKey] ? ' open' : '') + '><summary>ⓘ No shift needed (' + cl.length + ')</summary><div class="cllist">' +
+          cl.map(r => '<button class="ginfo" data-cl="' + r.id + '" data-clslot="' + k + '">' + esc(r.spot.replace(/^Spot /, '') || r.section) + '</button>').join(' ') + '</div></details>';
+        h += '</div>';
+      });
+    } else {
+      let openCount = 0;
+      rowsInView().forEach(r => used.forEach(i => { if (isOpenCell(r, i)) openCount++; }));
+      if (openCount) h += openBar(openCount, 'today');
+      const gr = rowsInView().filter(r => r.cells.some(c => c.length) || used.some(i => isOpenCell(r, i) || unschedAt(r, i) || reducedAt(r, i) || closedAt(r, i)));
+      h += '<div class="gridwrap"><table class="grid"><thead><tr><th class="first">Spot</th>' + used.map(i => '<th class="' + (i === live ? 'nowcol' : '') + '">' +
+        esc(slotLabel(i, vr)) + (i === live ? ' ●' : '') + '</th>').join('') + '</tr></thead><tbody>';
+      let lastSec = null;
+      gr.forEach(r => {
+        if (r.section !== lastSec) { lastSec = r.section; h += '<tr class="sec"><td colspan="' + (used.length + 1) + '"><span>' + esc(r.section) + '</span></td></tr>'; }
+        h += '<tr><td class="first">' + esc(r.spot.replace(/^Spot /, '')) + '</td>' + used.map(i => { const c = r.cells[i] || []; return '<td class="' + (isOpenCell(r, i) ? 'opencell' : (i === live ? 'nowcol' : '')) + '">' +
+          (isOpenCell(r, i) ? '<button class="gopen" data-fill="' + r.id + '" data-fslot="' + i + '">⚠ OPEN<span>+ Fill</span></button>' :
+           reducedAt(r, i) ? '<button class="ginfo" data-red="' + r.id + '" data-rslot="' + i + '">↓ Low</button>' :
+           unschedAt(r, i) ? '<button class="ginfo" data-un="' + r.id + '" data-uslot="' + i + '">ⓘ</button>' :
+           closedAt(r, i) ? '<button class="ginfo" data-cl="' + r.id + '" data-clslot="' + i + '">ⓘ</button>' :
+           r.allDay && i > 0 && (r.cells[i - 1] || []).length ? '<span class="muted">↳</span>' : c.map(n => '<button class="nm" data-p="' + esc(n) + '" data-row="' + r.id + '" data-cslot="' + i + '">' + esc(n) + '</button>').join('<br>')) + '</td>'; }).join('') + '</tr>';
+      });
+      h += '</tbody></table></div><p class="small muted">Tip: scroll sideways to see the whole day. Tap any name for their number.</p>';
+    }
+  }
+  $('#pane').innerHTML = h;
+  document.querySelectorAll('[data-sec]').forEach(b => b.onclick = () => { UI.sec = b.dataset.sec; paintSchedule(); });
+  document.querySelectorAll('[data-mode]').forEach(b => b.onclick = () => { UI.mode = b.dataset.mode; paintSchedule(); });
+  document.querySelectorAll('.slot[data-slot]').forEach(b => b.onclick = () => { UI.slot = Number(b.dataset.slot); paintSchedule(); });
+  bindPeopleButtons($('#pane'));
+  if (UI.mode === 'person') {
+    $('#pq').oninput = () => { UI.pq = $('#pq').value; paintPeople(); };
+    paintPeople();
+  }
+  // center the chosen time button by sliding only the row of times (scrollIntoView would also move the whole page)
+  const on = document.querySelector('.slot.on');
+  if (on) { const box = on.parentElement, a = on.getBoundingClientRect(), b = box.getBoundingClientRect(); box.scrollLeft += (a.left - b.left) - (box.clientWidth - a.width) / 2; }
+}
+
+function bindPeopleButtons(root) {
+  root.querySelectorAll('[data-p]').forEach(b => b.onclick = () =>
+    personSheet(b.dataset.p, b.dataset.row ? { rowId: Number(b.dataset.row), slot: Number(b.dataset.cslot != null ? b.dataset.cslot : b.dataset.slot) } : null));
+  root.querySelectorAll('[data-fill]').forEach(b => b.onclick = () => openPicker({ rowId: Number(b.dataset.fill), slot: Number(b.dataset.fslot) }, ''));
+  root.querySelectorAll('[data-ign-open]').forEach(b => b.onclick = () => confirmUnsched(rowById(Number(b.dataset.ignOpen)), Number(b.dataset.islot)));
+  root.querySelectorAll('[data-un]').forEach(b => b.onclick = () => unschedInfo(rowById(Number(b.dataset.un)), Number(b.dataset.uslot)));
+  root.querySelectorAll('details[data-clkey]').forEach(d => d.ontoggle = () => { UI.clOpen = UI.clOpen || {}; UI.clOpen[d.dataset.clkey] = d.open; });
+  root.querySelectorAll('[data-cl]').forEach(b => b.onclick = () => closedInfo(rowById(Number(b.dataset.cl)), Number(b.dataset.clslot)));
+  root.querySelectorAll('[data-red]').forEach(b => b.onclick = () => reducedInfo(rowById(Number(b.dataset.red)), Number(b.dataset.rslot)));
+}
+
+// "By person": every shift a person has today, so you can answer "what do I have next?"
+function paintPeople() {
+  const q = norm(UI.pq || '');
+  const now = nowInfo();
+  // follow the section chips like By time and Full day: only people (and shifts) in the chosen section
+  const inSec = b => UI.sec === 'ALL' || b.section === UI.sec;
+  const list = (L.people || []).filter(p => (!q || norm(p.name).includes(q) || norm(firstLast(p.name)).includes(q)) && p.blocks.some(inSec));
+  const shown = list.slice(0, 40);
+  $('#plist').innerHTML = (shown.length ? shown.map(p => {
+    let cur = -1, nxt = -1;
+    if (now !== null) {
+      p.blocks.forEach((b, i) => { const end = b.endMin == null ? 1440 : b.endMin; if (inSec(b) && cur < 0 && now >= b.startMin && now < end) cur = i; });
+      nxt = p.blocks.findIndex(b => inSec(b) && b.startMin > now);
+    }
+    return '<div class="card pcard"><div class="row"><button class="person has grow" data-p="' + esc(p.name) + '">' + esc(firstLast(p.name)) + '</button>' +
+      (canCancel(p.name) ? '<button class="btn sm danger" data-noshow="' + esc(p.name) + '">🚫 Cancellation/No-show</button>' : '') + '</div>' +
+      '<div class="pblocks">' + p.blocks.map((b, i) => {
+        if (!inSec(b)) return '';
+        const tag = editableCells(b).length ? 'button' : 'div';
+        return '<' + tag + ' class="pshift' + (i === cur ? ' now' : (i === nxt && cur < 0 ? ' next' : '')) + '"' + (tag === 'button' ? ' data-shift="' + esc(p.name) + '" data-b="' + i + '"' : '') +
+          '><div class="pt">' + esc(b.timeText) + '</div><div><strong>' + esc(b.spot) + '</strong> <span class="muted small">' + esc(b.section) + '</span>' +
+          (i === cur ? ' <span class="pill now">NOW</span>' : (i === nxt && cur < 0 ? ' <span class="pill next">NEXT</span>' : '')) + '</div>' + (tag === 'button' ? '<span class="chev">›</span>' : '<span></span>') + '</' + tag + '>';
+      }).join('') + '</div></div>';
+  }).join('') : '<p class="muted">' + (q ? 'No one matches that name.' : 'No one is scheduled in this section.') + '</p>') +
+    (list.length > shown.length ? '<p class="small muted center">Showing 40 of ' + list.length + '. Type more of the name to narrow it down.</p>' : '');
+  bindPeopleButtons($('#plist'));
+  $('#plist').querySelectorAll('[data-shift]').forEach(b => b.onclick = () => {
+    const p = (L.people || []).filter(x => x.name === b.dataset.shift)[0];
+    if (p) editShift(p.name, p.blocks[Number(b.dataset.b)]);
+  });
+  $('#plist').querySelectorAll('[data-noshow]').forEach(b => b.onclick = () => confirmNoShow(b.dataset.noshow, todayLines(rosterOf(b.dataset.noshow))));
+}
+
+// the time slots of a shift this leader can change (rows on their page that still have the person)
+function editableCells(b) {
+  return (b.cells || []).filter(c => { const r = rowById(c[0]); return r && (r.cells[c[1]] || []).length; });
+}
+// By person: tap a shift to swap or remove it. A shift that covers several time slots asks which one first.
+function editShift(name, b) {
+  const cells = editableCells(b).filter(c => (rowById(c[0]).cells[c[1]] || []).map(norm).indexOf(norm(name)) >= 0);
+  if (!cells.length) return;
+  if (cells.length === 1) { personSheet(name, { rowId: cells[0][0], slot: cells[0][1] }); return; }
+  openSheet('<div class="big">' + esc(firstLast(name)) + '</div><p class="muted small" style="margin:4px 0 12px">' + esc(b.spot) + ' · ' + esc(b.section) +
+    '<br>This shift covers ' + cells.length + ' time slots. Which one do you want to change?</p>' +
+    cells.map((c, i) => { const r = rowById(c[0]); return '<button class="cand" data-c="' + i + '"><div class="grow"><strong>' + esc(slotLabel(c[1], [r])) + '</strong>' +
+      '<div class="small muted">' + esc(r.spot) + '</div></div><span class="chev">›</span></button>'; }).join('') +
+    '<button class="btn line" style="width:100%;margin-top:12px" onclick="closeSheet()">Cancel</button>');
+  document.querySelectorAll('[data-c]').forEach(x => x.onclick = () => { const c = cells[Number(x.dataset.c)]; personSheet(name, { rowId: c[0], slot: c[1] }); });
+}
+
+function personBtn(n, r, k) {
+  const has = L.book[norm(n)] && L.book[norm(n)].phone;
+  return '<button class="person ' + (has ? 'has' : '') + '" data-p="' + esc(n) + '"' + (r ? ' data-row="' + r.id + '" data-slot="' + k + '"' : '') + '>' + esc(firstLast(n)) + '</button>';
+}
+
+function personSheet(name, ctx) {
+  // By person already has the No-show button beside each name, so its pop-ups leave it out
+  const byPerson = UI.tab === 'schedule' && UI.mode === 'person';
+  const entry = L.book[norm(name)] || (L.roster || []).filter(p => norm(p.name) === norm(name))[0] || { name: name, phone: '' };
+  const rp = (L.roster || []).filter(p => norm(p.name) === norm(name))[0];
+  // where is this person today?
+  const lines = todayLines(rp);
+  let edit = '';
+  if (ctx) {
+    const r = rowById(ctx.rowId);
+    if (r) edit = '<div class="editbox"><p class="eyebrow" style="margin:0 0 8px">' + esc(r.spot) + ' · ' + esc(slotLabel(ctx.slot, [r])) + '</p><div class="btns">' +
+      '<button class="btn" id="doswap">⇄ Swap</button><button class="btn line" id="doremove">Remove (leave open)</button></div></div>';
+  }
+  openSheet('<div class="big">' + esc(firstLast(entry.name)) + badges(rp) + '</div>' + limitsBox(rp) +
+    (entry.phone ? '<div class="phone">' + esc(entry.phone) + '</div><div class="btns"><a class="btn" href="' + smsHref(entry.phone) + '">💬 Text</a><a class="btn ghost" href="' + telHref(entry.phone) + '">📞 Call</a></div>'
+                 : '<div class="phone">No phone number on file</div>') +
+    '<div id="sendwrap">' + sendLinkBtn(name, entry.phone, 'btn line sendlink') + '</div>' +
+    (L.me.all && LINKS[norm(name)] ? '<button class="btn line" id="newlink" style="width:100%;margin-top:8px">🔄 Generate New Link</button>' : '') + edit +
+    (lines.length ? '<p class="eyebrow" style="margin-top:18px">Today</p><div class="small" style="line-height:1.7">' + lines.map(esc).join('<br>') + '</div>' : '') +
+    (rp && rp.cancelled ? '<div class="note" style="margin-top:16px;border-color:var(--warn);background:var(--warn-soft);color:#7A1A14">🚫 Marked as a cancellation/no-show. They can’t be scheduled.</div>' +
+      (canCancel(name) ? '<button class="btn" id="allowagain" style="width:100%;margin-top:10px">↩ Add back to roster</button>' : '')
+      : (canCancel(name) && !byPerson ? '<button class="btn danger" id="noshow" style="width:100%;margin-top:16px">🚫 Cancellation/No-show</button>' : '')) +
+    '<div style="margin-top:10px"><button class="btn line" style="width:100%" onclick="closeSheet()">Close</button></div>');
+  if ($('#noshow')) $('#noshow').onclick = () => confirmNoShow(name, lines);
+  if ($('#newlink')) $('#newlink').onclick = () => confirmNewLink(name);
+  if ($('#sendwrap [data-copy]')) $('#sendwrap [data-copy]').onclick = e => copy(e.currentTarget.dataset.copy);
+  if ($('#allowagain')) $('#allowagain').onclick = () => allowAgain($('#allowagain'), name);
+  if (ctx && $('#doswap')) {
+    $('#doswap').onclick = () => openPicker(ctx, name);
+    $('#doremove').onclick = () => confirmEdit(ctx, name, '');
+  }
+}
+
+// Overseers: replace someone's access code. Their old link stops working right away.
+function confirmNewLink(name) {
+  const self = norm(name) === norm(L.me.name);
+  openSheet('<div class="big">Generate a new link for ' + esc(firstLast(name)) + '?</div>' +
+    '<div class="note" style="margin:10px 0 14px;border-color:var(--warn);background:var(--warn-soft);color:#7A1A14">' +
+    (self ? 'Your current link will stop working right away, including the page you have open now. You’ll be moved to your new link.'
+          : 'Their current link will stop working right away. Anyone who opens the old link won’t see the schedule. You’ll need to send ' + esc(firstLast(name)) + ' the new link.') + '</div>' +
+    '<button class="btn danger" id="newlinkgo" style="width:100%">Yes, generate a new link</button>' +
+    '<div style="margin-top:10px"><button class="btn line" style="width:100%" onclick="closeSheet()">Cancel</button></div>');
+  $('#newlinkgo').onclick = () => {
+    busy($('#newlinkgo'), 'Generating…');
+    call('apiEdit', L.code, { newLink: name }).then(res => {
+      if (!res || !res.ok) { openSheet('<div class="big">Not changed</div><p>' + esc((res && res.error) || 'Try again.') + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); return; }
+      LINKS[norm(name)] = res.code;
+      if (res.self) { L.code = res.code; setUrl({ code: L.code }); }
+      const entry = L.book[norm(name)] || {};
+      openSheet('<div class="big">New link ready ✓</div><p class="muted small" style="margin:6px 0 14px">' +
+        (res.self ? 'This page now uses your new link. Bookmark it.' : 'The old link no longer works. Send ' + esc(firstLast(name)) + ' this one.') + '</p>' +
+        '<div id="sendwrap">' + sendLinkBtn(name, entry.phone, 'btn sendlink') + '</div>' +
+        '<div style="margin-top:10px"><button class="btn line" style="width:100%" onclick="closeSheet()">Done</button></div>');
+      if ($('#sendwrap [data-copy]')) $('#sendwrap [data-copy]').onclick = e => copy(e.currentTarget.dataset.copy);
+      silentRefresh();
+    }, e => openSheet('<div class="big">Not changed</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+  };
+}
+
+function allowAgain(btn, name) {
+    busy(btn, 'Saving…');
+    call('apiAllowAgain', L.code, name).then(res => {
+      if (!res.ok) { openSheet('<div class="big">Not saved</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); return; }
+      openSheet('<div class="big">' + esc(firstLast(name)) + ' is back on the roster ✓</div><p class="muted small" style="margin:6px 0 14px">They’ll show up again when you swap or fill a spot.</p><button class="btn line" style="width:100%" onclick="closeSheet()">Done</button>');
+      silentRefresh();
+    }, e => openSheet('<div class="big">Not saved</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+}
+
+function confirmNoShow(name, lines) {
+  openSheet('<div class="big" style="color:var(--warn)">⚠ Mark ' + esc(firstLast(name)) + ' as a cancellation/no-show?</div>' +
+    (lines.length ? '<p style="margin:10px 0">This removes <strong>all ' + lines.length + ' of their assignments</strong> for the day and leaves those spots open:</p>' +
+    '<div class="note" style="border-color:var(--warn);background:var(--warn-soft);color:#7A1A14;line-height:1.7">' + lines.map(esc).join('<br>') + '</div>' : '') +
+    '<p style="margin:10px 0">They’ll also be <strong>taken off the list of people who can be scheduled</strong>. To undo that later, find them in the <strong>Volunteer List</strong> and choose <strong>Add back to roster</strong>.</p>' +
+    '<p class="small muted" style="margin:10px 0 14px">This can’t be undone with one tap. If it’s a mistake, you’ll need to put them back in each spot (the Change Log lists them).</p>' +
+    '<div class="btns"><button class="btn danger" id="yesnoshow">' + (lines.length ? 'Yes, clear all ' + lines.length : 'Yes, mark it') + '</button><button class="btn line" onclick="closeSheet()">Cancel</button></div>');
+  $('#yesnoshow').onclick = () => {
+    // clear them from the page right away, then save in the background
+    const snap = snapL(), tok = ++SAVETOK;
+    L.rows.forEach(r => r.cells.forEach((c, k) => { if (c.map(norm).indexOf(norm(name)) >= 0) { r.cells[k] = c.filter(n => norm(n) !== norm(name)); r.allDay = false; } }));
+    const rp = rosterOf(name); if (rp) { rp.busy = {}; rp.cancelled = true; rp.pickable = false; }
+    L.people = (L.people || []).filter(p => norm(p.name) !== norm(name));
+    beginSave();
+    paintLeader();
+    const done = (saving, removed) => openSheet('<div id="save-' + tok + '"></div><div class="big">' + (saving ? '<span class="spin"></span>Saving…' : 'Marked as cancellation/no-show ✓') + '</div><p class="muted small" style="margin:6px 0 10px">' +
+      esc(firstLast(name)) + (removed.length ? ' was removed from ' + removed.length + ' spot' + (removed.length > 1 ? 's' : '') +
+      ' and can’t be scheduled until they’re added back to the roster. These spots now show as open so you can fill them:</p><div class="small" style="line-height:1.7">' +
+      removed.map(esc).join('<br>') + '</div>' : ' can’t be scheduled until they’re added back to the roster.</p>') +
+      (saving ? '<p class="small muted" style="margin-top:10px">Please keep this page open for a few seconds.</p>' : '') + '<button class="btn line" style="width:100%;margin-top:14px" onclick="closeSheet()">Done</button>');
+    done(true, lines);
+    call('apiNoShow', L.code, name).then(res => {
+      if (!res.ok) { restoreL(snap); paintLeader(); notSaved(res.error); endSave(); return; }
+      if (sheetShowing('save-' + tok)) done(false, res.removed);
+      endSave();
+    }, e => { restoreL(snap); paintLeader(); notSaved(e.message || 'Check your signal and try again.'); endSave(); });
+  };
+}
+
+// a person's assignments today, e.g. "7:45 AM · Spot 3"
+function todayLines(rp) {
+  // a spot with a Time Override (e.g. baptism "12:00 PM until baptism ends") shows that time instead of the column's
+  const override = i => (L.rows.filter(r => r.override && (r.cells[i] || []).some(n => norm(n) === norm(rp.name)))[0] || {}).override;
+  return rp ? Object.keys(rp.busy).map(Number).sort((a, b) => a - b).map(i => (override(i) || L.slots[i].label) + ' · ' + rp.busy[i]) : [];
+}
+
+// overseers: anyone but themselves; keymen: people in their own sections (their roster)
+function canCancel(name) {
+  if (norm(name) === norm(L.me.name)) return false;
+  return L.me.all || !!rosterOf(name);
+}
+
+function rowById(id) { return L.rows.filter(r => r.id === id)[0]; }
+function rosterOf(name) { return (L.roster || []).filter(p => norm(p.name) === norm(name))[0]; }
+// little tags shown next to a name: age and keyman
+function badges(p) {
+  if (!p) return '';
+  return (p.keyman ? ' <span class="keypill">🔑 Keyman</span>' : '') + (p.age ? ' <span class="agepill">Age ' + esc(p.age) + '</span>' : '');
+}
+function limitsBox(p) {
+  return p && p.limits ? '<div class="limitsbox"><strong>ⓘ Scheduling limitations:</strong> ' + esc(p.limits) + '</div>' : '';
+}
+
+/* ---------- swap / fill picker ---------- */
+function restInfo(p, k) {
+  const busy = Object.keys(p.busy).map(Number).filter(i => i !== k);
+  const prev = busy.filter(i => i < k).sort((a, b) => b - a)[0];
+  const next = busy.filter(i => i > k).sort((a, b) => a - b)[0];
+  const sl = L.slots[k];
+  const prevEnd = prev != null ? (L.slots[prev].end != null ? L.slots[prev].end : L.slots[prev].start + 60) : null;
+  const slotEnd = sl.end != null ? sl.end : sl.start + 60;
+  return {
+    busyNow: p.busy[k] != null ? p.busy[k] : null,
+    before: prevEnd == null ? Infinity : sl.start - prevEnd,
+    after: next == null ? Infinity : L.slots[next].start - slotEnd,
+    prevEnd: prevEnd, nextStart: next != null ? L.slots[next].start : null
+  };
+}
+function dur(m) { if (m === Infinity) return ''; const h = Math.floor(m / 60), mm = m % 60; return h ? h + ' hr' + (mm ? ' ' + mm + ' min' : '') : mm + ' min'; }
+
+function openPicker(ctx, oldName) {
+  const r = rowById(ctx.rowId), k = ctx.slot;
+  if (!r) return;
+  const hidden = L.hiddenSections || [];
+  const rowHidden = hidden.indexOf(norm(r.section)) >= 0;
+  const inCell = (r.cells[k] || []).map(norm);
+  const list = (L.roster || []).filter(p => p.pickable && inCell.indexOf(norm(p.name)) < 0 && (rowHidden || !p.blocked))
+    .map(p => Object.assign({ p: p }, restInfo(p, k)))
+    .sort((a, b) => (a.busyNow ? 1 : 0) - (b.busyNow ? 1 : 0) || b.before - a.before || b.after - a.after || (a.p.name < b.p.name ? -1 : 1));
+  const title = oldName ? 'Replace ' + firstLast(oldName) : 'Fill this spot';
+  openSheet('<div class="big">' + esc(title) + '</div><div class="muted small" style="margin:4px 0 12px">' + esc(r.spot) + ' · ' + esc(r.section) + ' · ' + esc(slotLabel(k, [r])) +
+    (r.allDay ? ' (this time slot only)' : '') + '</div>' +
+    (oldName ? '' : '<button class="btn sm ign" id="pkign" style="margin:0 0 10px">⊘ Ignore — leave this spot unscheduled</button>') +
+    '<input type="search" id="kq" placeholder="Search ' + (L.me.all ? 'everyone' : 'your team') + '…" autocomplete="off"><div id="krows" style="margin-top:8px"></div>' +
+    '<div class="pickfoot"><button class="btn line" style="width:100%" onclick="closeSheet()">Cancel</button></div>', 'fixedlist');
+  const paint = () => {
+    const q = norm($('#kq').value);
+    $('#krows').scrollTop = 0;
+    const shown = list.filter(x => !q || norm(x.p.name).includes(q) || norm(firstLast(x.p.name)).includes(q)).slice(0, 60);
+    $('#krows').innerHTML = shown.map((x, i) => {
+      const status = x.busyNow ? '<span class="warn">⚠ Already at ' + esc(x.busyNow) + ' this time</span>'
+        : (x.before === Infinity ? 'No shift before this' : 'Off since ' + fmt(x.prevEnd) + ' (' + dur(x.before) + ')') +
+          ' · ' + (x.nextStart == null ? 'no later shifts' : 'next at ' + fmt(x.nextStart));
+      return '<button class="cand' + (x.busyNow ? ' busy' : '') + '" data-i="' + list.indexOf(x) + '"><div class="grow"><strong>' + esc(firstLast(x.p.name)) + '</strong>' +
+        badges(x.p) + '<div class="small muted">' + status + '</div>' +
+        (x.p.limits ? '<div class="limits"><span>ⓘ <strong>Limitations:</strong> ' + esc(x.p.limits) + '</span></div>' : '') + '</div><span class="chev">›</span></button>';
+    }).join('') || '<p class="muted">No one matches that name.</p>';
+    $('#krows').querySelectorAll('.cand').forEach(b => b.onclick = () => { const x = list[Number(b.dataset.i)]; confirmEdit(ctx, oldName, x.p.name, x.busyNow); });
+  };
+  $('#kq').oninput = paint; paint();
+  if ($('#pkign')) $('#pkign').onclick = () => confirmUnsched(r, k);
+}
+
+/* ---------- open spots left unscheduled on purpose ---------- */
+// Only spots with their own number can be reduced (rows like Exteriors share one name, so they can't be told apart)
+function ownSpot(r) { return r.pos && L.rows.filter(x => x.section === r.section && x.pos === r.pos).length === 1; }
+// "Ignore" on an open spot: pick which of this spot's open times, then a reason (or Reduced Staffing-Low Traffic)
+function confirmUnsched(r, k) {
+  if (!r) return;
+  const open = L.slots.map((sl, j) => j).filter(j => isOpenCell(r, j));
+  const canReduce = ownSpot(r);
+  openSheet('<div class="big">Leave ' + esc(r.spot) + ' unscheduled?</div><p class="muted small" style="margin:4px 0 12px">' + esc(r.section) + '</p>' +
+    '<p style="margin:0 0 10px">These times <strong>won’t be scheduled</strong> and won’t show as open spots. Everyone will see the reason instead.</p>' +
+    '<p class="eyebrow" style="margin:12px 0 6px">For which times?</p>' +
+    open.map(j => '<label class="radio"><input type="checkbox" name="utime" value="' + j + '"' + (j === k ? ' checked' : '') + '> ' + esc(slotLabel(j, [r])) + '</label>').join('') +
+    '<p class="eyebrow" style="margin:14px 0 6px">Reason (everyone can see it)</p>' +
+    (canReduce ? '<button class="btn line" id="ured" aria-pressed="false" style="width:100%;margin-bottom:8px">↓ Reduced Staffing-Low Traffic</button>' : '') +
+    '<input type="text" id="unote" maxlength="200" value="" placeholder="' + (canReduce ? 'Or type a reason' : 'Type a reason') + '" autocomplete="off">' +
+    '<p class="small muted" id="uerr" style="margin:8px 0 0;color:var(--warn)"></p>' +
+    '<p class="small muted" style="margin:10px 0 14px">You can undo this later, one time at a time: tap the note (or the ⓘ / ↓ Low in Full day).</p>' +
+    '<div class="btns"><button class="btn" id="yesun">Save</button><button class="btn line" onclick="closeSheet()">Cancel</button></div>');
+  let reduced = false;
+  if ($('#ured')) $('#ured').onclick = () => {
+    reduced = !reduced;
+    $('#ured').className = 'btn' + (reduced ? '' : ' line'); $('#ured').setAttribute('aria-pressed', reduced);
+    $('#ured').textContent = (reduced ? '✓ ' : '↓ ') + 'Reduced Staffing-Low Traffic';
+    $('#unote').disabled = reduced; if (reduced) $('#unote').value = '';
+    $('#uerr').textContent = '';
+  };
+  $('#yesun').onclick = () => {
+    const times = [...document.querySelectorAll('input[name=utime]:checked')].map(x => L.slots[Number(x.value)].label);
+    const note = $('#unote').value.trim();
+    if (!times.length) { $('#uerr').textContent = 'Tick at least one time.'; return; }
+    if (!reduced && !note) { $('#uerr').textContent = 'Type a reason' + (canReduce ? ', or choose Reduced Staffing-Low Traffic.' : '.'); $('#unote').focus(); return; }
+    busy($('#yesun'), 'Saving…');
+    if (reduced) saveReduced({ section: r.section, pos: r.pos, times: times }, r.spot + ' is reduced for low traffic ✓');
+    else saveUnsched({ section: r.section, pos: r.pos, times: times, note: note }, r.spot + ' will stay unscheduled ✓');
+  };
+}
+function unschedInfo(r, k) {
+  const u = r && unschedAt(r, k);
+  if (!u) return;
+  openSheet('<div class="big">⊘ ' + esc(r.spot) + ' · not scheduled</div><p class="muted small" style="margin:4px 0 12px">' + esc(r.section) + ' · ' + esc(slotLabel(k, [r])) + '</p>' +
+    '<div class="note" style="margin:0 0 10px">ⓘ ' + esc(u.note) + '</div>' +
+    '<p class="small muted" style="margin:0 0 14px">Set by ' + esc(firstLast(u.by)) + (u.when ? ' · ' + esc(u.when) : '') + '</p>' +
+    '<button class="btn line" id="unopen" style="width:100%">Reopen ' + esc(slotLabel(k, [r])) + ' for Scheduling</button><button class="btn" style="width:100%;margin-top:8px" onclick="closeSheet()">Close</button>');
+  $('#unopen').onclick = () => reopenThenFill(r, k, { unscheduled: true, section: r.section, pos: r.pos, times: [L.slots[k].label], undo: true }, () => {
+    // drop this time; an older "All day" entry keeps covering the spot's other empty times
+    const label = L.slots[k].label, same = u => norm(u.section) === norm(r.section) && norm(u.pos) === norm(r.pos);
+    const allDay = (L.unscheduled || []).filter(u => same(u) && u.time === 'All day')[0];
+    L.unscheduled = (L.unscheduled || []).filter(u => !(same(u) && (u.time === label || u.time === 'All day')));
+    if (allDay) L.slots.forEach((sl, j) => { if (j !== k && !(r.cells[j] || []).length && (r.closed || []).indexOf(j) < 0) L.unscheduled.push(Object.assign({}, allDay, { time: sl.label })); });
+  });
+}
+// "No shift needed" typed on the Schedule sheet: show why, and offer to open it (which erases that text on the sheet)
+function closedAt(r, i) { return !(r.cells[i] || []).length && (r.closed || []).indexOf(i) >= 0 && !reducedAt(r, i); }
+function closedInfo(r, k) {
+  if (!r || !closedAt(r, k)) return;
+  openSheet('<div class="big">ⓘ ' + esc(r.spot) + ' · not scheduled</div><p class="muted small" style="margin:4px 0 12px">' + esc(r.section) + ' · ' + esc(slotLabel(k, [r])) + '</p>' +
+    '<div class="note" style="margin:0 0 10px">ⓘ “No shift needed” was typed in this spot on the Google Sheet schedule.</div>' +
+    '<p class="small muted" style="margin:0 0 14px">Reopening erases “No shift needed” from that cell, so the spot shows + Fill.</p>' +
+    '<button class="btn line" id="clopen" style="width:100%">Reopen ' + esc(slotLabel(k, [r])) + ' for Scheduling</button><button class="btn" style="width:100%;margin-top:8px" onclick="closeSheet()">Close</button>');
+  $('#clopen').onclick = () => reopenThenFill(r, k, { reopen: true, rowId: r.id, section: r.section, pos: r.pos, time: L.slots[k].label },
+    () => { r.closed = (r.closed || []).filter(x => x !== k); });
+}
+function reducedInfo(r, k) {
+  const u = reducedAt(r, k);
+  if (!u) return;
+  const before = (r.cells[k - 1] || []).map(firstLast).join(', ');
+  openSheet('<div class="big">↓ ' + esc(r.spot) + ' · Reduced Staffing-Low Traffic</div><p class="muted small" style="margin:4px 0 12px">' + esc(r.section) + ' · ' + esc(slotLabel(k, [r])) + '</p>' +
+    '<div class="note" style="margin:0 0 10px">No one is scheduled here at this time because traffic is low.' + (before ? ' ' + esc(before) + ' has been told he can leave at ' + esc(fmt(L.slots[k].start)) + ' without waiting for relief.' : '') + '</div>' +
+    '<p class="small muted" style="margin:0 0 14px">Set by ' + esc(firstLast(u.by)) + (u.when ? ' · ' + esc(u.when) : '') + '</p>' +
+    '<button class="btn line" id="unred" style="width:100%">Reopen ' + esc(slotLabel(k, [r])) + ' for Scheduling</button><button class="btn" style="width:100%;margin-top:8px" onclick="closeSheet()">Close</button>');
+  $('#unred').onclick = () => reopenThenFill(r, k, { reduced: true, section: r.section, pos: r.pos, times: [L.slots[k].label], undo: true }, () => {
+    L.reduced = (L.reduced || []).filter(u => !(norm(u.section) === norm(r.section) && norm(u.pos) === norm(r.pos) && u.time === L.slots[k].label));
+    r.closed = (r.closed || []).filter(x => x !== k);   // the server also erases any "No shift needed" in that cell
+  });
+}
+// Reopen one time and go straight to picking who fills it; the reopen saves in the background
+// (if it can't save, the spot is put back the way it was)
+function reopenThenFill(r, k, req, open) {
+  const before = { closed: (r.closed || []).slice(), unscheduled: (L.unscheduled || []).slice(), reduced: (L.reduced || []).slice() };
+  open();
+  beginSave();
+  paintLeader();
+  openPicker({ rowId: r.id, slot: k }, '');
+  const fail = msg => { r.closed = before.closed; L.unscheduled = before.unscheduled; L.reduced = before.reduced; paintLeader(); notSaved(msg); endSave(); };
+  call('apiEdit', L.code, req).then(res => { if (!res.ok) fail(res.error); else endSave(); }, e => fail(e.message || 'Check your signal and try again.'));
+}
+function saveReduced(req, doneMsg) {
+  call('apiEdit', L.code, Object.assign({ reduced: true }, req)).then(res => {
+    if (!res.ok) { openSheet('<div class="big">Not saved</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); if (res.changed) silentRefresh(); return; }
+    closeSheet(); toast(doneMsg); silentRefresh();
+  }, e => openSheet('<div class="big">Not saved</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+}
+function saveUnsched(req, doneMsg) {
+  call('apiEdit', L.code, Object.assign({ unscheduled: true }, req)).then(res => {
+    if (!res.ok) { openSheet('<div class="big">Not saved</div><p>' + esc(res.error) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'); if (res.changed) silentRefresh(); return; }
+    closeSheet(); toast(doneMsg); silentRefresh();
+  }, e => openSheet('<div class="big">Not saved</div><p>' + esc(e.message) + '</p><button class="btn" style="width:100%" onclick="closeSheet()">OK</button>'));
+}
+
+function confirmEdit(ctx, oldName, newName, busyNow) {
+  const r = rowById(ctx.rowId), k = ctx.slot, when = slotLabel(k, [r]);
+  const what = oldName && newName ? 'Swap <strong>' + esc(firstLast(oldName)) + '</strong> for <strong>' + esc(firstLast(newName)) + '</strong>'
+    : newName ? 'Put <strong>' + esc(firstLast(newName)) + '</strong> in this spot' : 'Remove <strong>' + esc(firstLast(oldName)) + '</strong> and leave this spot open';
+  openSheet('<div class="big">Confirm change</div><p style="margin:10px 0 4px">' + what + '</p><p class="muted small" style="margin:0 0 12px">' + esc(r.spot) + ' · ' + esc(r.section) + ' · ' + esc(when) +
+    (r.allDay ? ' (this time slot only)' : '') + '</p>' + (newName ? limitsBox(rosterOf(newName)) : '') +
+    (busyNow ? '<div class="note" style="border-color:var(--warn);background:var(--warn-soft);color:#7A1A14;margin-bottom:12px">⚠ ' + esc(firstLast(newName)) +
+      ' is already scheduled at ' + esc(busyNow) + ' at this time. Save anyway only if you know that’s right.</div>' : '') +
+    alsoBox(r, k, oldName, newName) +
+    '<div class="btns"><button class="btn' + (newName ? '' : ' danger') + '" id="dosave">' + (busyNow ? 'Save anyway' : newName ? 'Save change' : 'Remove') + '</button><button class="btn line" onclick="closeSheet()">Cancel</button></div>');
+  if ($('#alsoall')) $('#alsoall').onclick = () => document.querySelectorAll('[data-also]').forEach(x => { if (!x.dataset.busy) x.checked = true; });
+  $('#dosave').onclick = () => {
+    // later open times in this spot the leader also wants filled with the same person
+    const also = Array.from(document.querySelectorAll('[data-also]')).filter(x => x.checked).map(x => Number(x.dataset.also));
+    const busyAt = j => { const rp = rosterOf(newName); return rp && rp.busy[j] != null ? rp.busy[j] : ''; };
+    const alsoWarn = {};
+    also.forEach(j => { if (busyAt(j)) alsoWarn[j] = firstLast(newName) + ' also at ' + busyAt(j); });
+    const req = { rowId: r.id, slot: k, pos: r.pos, section: r.section, expected: (r.cells[k] || []).slice(), oldName: oldName || '', newName: newName || '',
+      warning: busyNow ? firstLast(newName) + ' also at ' + busyNow : '', alsoSlots: also, alsoWarn: alsoWarn };
+    // show the change right away, then save it in the background
+    const snap = snapL(), tok = ++SAVETOK;
+    applyEditLocal(r, k, oldName, newName);
+    also.forEach(j => applyEditLocal(r, j, '', newName));
+    beginSave();
+    paintLeader();
+    afterEdit({ spot: r.spot, time: [k].concat(also).map(j => r.override || L.slots[j].label).join(', '), oldName: oldName || '', newName: newName || '' }, tok, true);
+    call('apiEdit', L.code, req).then(res => {
+      if (!res.ok) { restoreL(snap); paintLeader(); notSaved(res.error); endSave(); return; }
+      if (sheetShowing('save-' + tok)) afterEdit(res, tok, false);
+      endSave();
+    }, e => { restoreL(snap); paintLeader(); notSaved(e.message || 'Check your signal and try again.'); endSave(); });
+  };
+}
+
+// Filling an open spot: offer the later open times in the same spot (never ones someone already has)
+function alsoBox(r, k, oldName, newName) {
+  if (oldName || !newName) return '';
+  const later = L.slots.map((s, j) => j).filter(j => j > k && isOpenCell(r, j));
+  if (!later.length) return '';
+  const rp = rosterOf(newName);
+  return '<div class="alsobox"><p class="eyebrow" style="margin:0 0 4px">Also fill the rest of the day?</p>' +
+    '<p class="small muted" style="margin:0 0 8px">These later times in ' + esc(r.spot) + ' are still open. Tick the ones ' + esc(firstLast(newName)) + ' should take too.</p>' +
+    later.map(j => {
+      const busy = rp && rp.busy[j] != null ? rp.busy[j] : '';
+      return '<label class="radio"><input type="checkbox" data-also="' + j + '"' + (busy ? ' data-busy="1"' : '') + '> ' + esc(slotLabel(j, [r])) +
+        (busy ? ' <span class="warn small">⚠ already at ' + esc(busy) + '</span>' : '') + '</label>';
+    }).join('') +
+    (later.length > 1 ? '<button class="btn sm line" id="alsoall" style="margin-top:6px">Tick all free times</button>' : '') + '</div>';
+}
+
+// The "Saved" window. While saving, its Text buttons stay locked so no one is texted about a change that didn't save.
+function afterEdit(res, tok, saving) {
+  const phoneOf = n => { const b = L.book[norm(n)] || (L.roster || []).filter(p => norm(p.name) === norm(n))[0]; return b ? b.phone : ''; };
+  const last = n => String(n).split(',')[0].trim();
+  const btn = (n, msg, label) => !phoneOf(n) ? '<p class="small muted">No phone on file for ' + esc(firstLast(n)) + '.</p>'
+    : saving ? '<button class="btn" style="width:100%;margin-top:8px" disabled>⏳ ' + label + ' (unlocks when saved)</button>'
+    : '<a class="btn" style="width:100%;margin-top:8px" href="' + smsHref(phoneOf(n), msg) + '">💬 ' + label + '</a>';
+  let h = '<div id="save-' + tok + '"></div><div class="big">' + (saving ? '<span class="spin"></span>Saving…' : 'Saved ✓') + '</div><p class="muted small" style="margin:6px 0 10px">' + esc(res.spot) + ' · ' + esc(res.time) + '. ' +
+    (saving ? 'The schedule already shows it. Please keep this page open for a few seconds.' : 'Everyone will see it when they refresh.') + '</p>';
+  if (res.oldName) h += btn(res.oldName, 'Hey Brother ' + last(res.oldName) + ', your attendant assignment at ' + res.time + ' (' + res.spot + ') has been changed. Please refresh your schedule page to see your latest assignments: ' + personalLink(res.oldName), 'Text ' + firstLast(res.oldName));
+  if (res.newName) h += btn(res.newName, 'Hey Brother ' + last(res.newName) + ', you have been assigned to ' + res.spot + ' at ' + res.time + '. Please refresh your schedule page to see your latest assignments: ' + personalLink(res.newName), 'Text ' + firstLast(res.newName));
+  h += '<button class="btn line" style="width:100%;margin-top:12px" onclick="closeSheet()">Done</button>';
+  openSheet(h);
+}
+
+function paintIssues() {
+  const list = L.issues || [];
+  const dups = list.filter(i => i.type === 'Double-booked' && !i.ignored);
+  const ign = list.filter(i => i.type === 'Double-booked' && i.ignored);
+  const other = list.filter(i => i.type !== 'Double-booked');
+  const isNew = k => (UI.newConflicts || []).indexOf(k) >= 0;
+  const newTag = k => isNew(k) ? '<span class="newpill">NEW</span>' : '';
+  const row = (i, btn) => '<div class="issue"><span class="pill">' + esc(i.type) + '</span><div class="grow">' + newTag(issueKey(i)) + esc(i.text) + '</div>' + (btn || '') + '</div>';
+  let h = '<div class="card"><p class="eyebrow">Double-bookings</p>' +
+    (dups.length ? dups.map(i => row(i, '<button class="btn sm line" data-ign="' + esc(i.key) + '" data-txt="' + esc(i.text) + '">Ignore</button>')).join('')
+                 : '<p>No double-bookings. ✓</p>') + '</div>';
+  if (ign.length) h += '<div class="card"><p class="eyebrow">Ignored (OK’d by an overseer)</p>' +
+    ign.map(i => row(i, '<button class="btn sm ghost" data-unign="' + esc(i.key) + '">Un-ignore</button>')).join('') + '</div>';
+  const can = L.cancelled || [];
+  h += '<div class="card"><p class="eyebrow">Cancellations / no-shows</p>' + (can.length
+    ? '<p class="small muted" style="margin:0 0 6px">These people can’t be scheduled. Tap <strong>Add back to roster</strong> to make them schedulable again.</p>' +
+      can.map(c => '<div class="issue"><span class="pill">🚫</span><div class="grow">' + newTag(cancelKey(c)) + '<strong>' + esc(firstLast(c.name)) + '</strong><div class="small muted">' +
+        esc([c.by ? 'by ' + firstLast(c.by) : '', c.when].filter(Boolean).join(' · ')) + '</div></div>' +
+        '<button class="btn sm" data-allow="' + esc(c.name) + '">↩ Add back to roster</button></div>').join('')
+    : '<p>No one is marked as a cancellation or no-show. ✓</p>') + '</div>';
+  h += '<div class="card"><p class="eyebrow">Other checks</p>' + (other.length ? other.map(i => row(i)).join('') : '<p>Every name has a phone number, and every section has a keyman. ✓</p>') + '</div>';
+  $('#pane').innerHTML = h;
+  $('#pane').querySelectorAll('[data-ign]').forEach(b => b.onclick = () => { busy(b, 'Saving…'); call('apiIgnore', L.code, b.dataset.ign, b.dataset.txt, false).then(() => { toast('Conflict ignored'); silentRefresh(); }); });
+  $('#pane').querySelectorAll('[data-allow]').forEach(b => b.onclick = () => allowAgain(b, b.dataset.allow));
+  $('#pane').querySelectorAll('[data-unign]').forEach(b => b.onclick = () => { busy(b, 'Saving…'); call('apiIgnore', L.code, b.dataset.unign, '', true).then(() => { toast('Conflict restored'); silentRefresh(); }); });
+}
+
+function paintChanges() {
+  const list = L.changes || [];
+  const isBack = c => c.action === 'Allowed again' || c.action === 'Added back to roster';
+  const desc = c => c.action === 'Reduced (low traffic)' ? '↓ Reduced for low traffic' : c.action === 'Staffed again' ? 'Staffed again (no longer reduced)' : c.action === 'Left unscheduled' ? '⊘ Left unscheduled: ' + esc(c.added) : c.action === 'Open again' ? 'Reopened for scheduling' : isBack(c) ? '↩ ' + esc(firstLast(c.added)) + ' added back to the roster' : c.action === 'No-show' ? '🚫 Cancellation/No-show: ' + esc(firstLast(c.removed)) + ' removed from ' + esc(c.spot) + '<div class="small muted">' + esc(c.time) + '</div>' : (c.action === 'Swap' ? esc(firstLast(c.removed)) + ' → ' + esc(firstLast(c.added)) : c.action === 'Fill' ? 'Filled with ' + esc(firstLast(c.added)) : 'Removed ' + esc(firstLast(c.removed)));
+  $('#pane').innerHTML = '<div class="card"><p class="eyebrow">Changes made from the pages</p>' + (list.length ? list.map(c =>
+    '<div class="issue' + (c.role === 'Keyman' && !c.reviewed ? ' unrev' : '') + '"><div class="grow">' + (c.action === 'No-show' || isBack(c) ? '' : '<strong>' + esc(c.spot) + ' · ' + esc(c.time) + '</strong> <span class="muted small">' + esc(c.section) + '</span>') + '<div>' + desc(c) + '</div>' +
+      '<div class="small muted">' + esc(c.when) + ' · ' + esc(firstLast(c.by)) + ' (' + esc(c.role) + ')' + (c.warning ? ' · ⚠ ' + esc(c.warning) : '') +
+      (c.role === 'Keyman' && c.reviewed ? ' · ' + esc(c.reviewed) : '') + '</div></div>' +
+      (c.role === 'Keyman' && !c.reviewed ? '<button class="btn sm" data-rev="' + c.row + '">Reviewed</button>' : '') + '</div>').join('')
+    : '<p class="muted">No changes yet. Swaps made by keymen or overseers will show here.</p>') + '</div>';
+  $('#pane').querySelectorAll('[data-rev]').forEach(b => b.onclick = () => { busy(b, 'Saving…'); call('apiReview', L.code, Number(b.dataset.rev)).then(() => { toast('Marked as reviewed'); silentRefresh(); }); });
+}
+
+// Volunteer List: everyone's number, plus Cancellation/No-show (or Add back to roster)
+function paintContacts() {
+  const d = L;
+  let h = '';
+  if (d.me.all && d.leaderLinks) {
+    // overseers: the access-code links for keymen and overseers (folds away)
+    const leadRow = l => '<div class="linkrow"><div class="grow"><strong>' + esc(firstLast(l.name)) + '</strong> <span class="deptpill">' + esc(l.department || l.role) + '</span></div>' +
+      '<button class="btn sm line xs" data-copy="' + esc(leaderLink(l.code)) + '">Copy</button>' +
+      (l.phone ? '<a class="btn sm xs" href="' + smsHref(l.phone, 'Hi ' + firstLast(l.name).split(' ')[0] + ', here is your ' + (l.all ? 'overseer' : 'keyman') + ' view of the attendant schedule. Please don’t share this link: ' + leaderLink(l.code)) + '">Send link</a>' : '') +
+      '<button class="btn sm xs ghost" data-newlink="' + esc(l.name) + '">🔄 Generate New Link</button></div>';
+    h += '<div class="card"><button class="collhead" id="lltoggle"><span class="grow"><span class="eyebrow" style="margin:0">Oversight &amp; Keymen links</span>' +
+      '<span class="small muted" style="display:block">Their keyman/overseer view, with their access code</span></span><span class="plus">' + (UI.llOpen ? '−' : '+') + '</span></button>' +
+      (UI.llOpen ? '<p class="small muted" style="margin:10px 0 8px">Each link includes that person’s access code. Only send it to them.</p>' +
+        '<div class="group-head">Overseers</div>' + d.leaderLinks.filter(l => l.all).map(leadRow).join('') +
+        '<div class="group-head">Keymen</div>' + d.leaderLinks.filter(l => !l.all).map(leadRow).join('') : '') + '</div>';
+  }
+  h += '<div class="card"><p class="eyebrow">Volunteer List</p><p class="small muted" style="margin:0 0 8px">' + (d.me.all ? '' : 'Everyone scheduled in your sections. ') +
+    '“Send link” opens a text with their personal schedule link already typed in' + (d.me.all ? '; “Email” sends it by email' + (d.ccEmails && d.ccEmails.length ? ' with the other overseers CC’d' : '') : '') + '. You just tap send.</p>' +
+    '<input type="search" id="cq" placeholder="Search names…" autocomplete="off"><div id="crows" style="margin-top:8px"></div></div>';
+  $('#pane').innerHTML = h;
+  if ($('#lltoggle')) $('#lltoggle').onclick = () => { UI.llOpen = !UI.llOpen; paintContacts(); };
+  $('#cq').value = UI.cq || '';
+  const paint = () => {
+    UI.cq = $('#cq').value;
+    const q = norm(UI.cq);
+    $('#crows').innerHTML = (d.contactList || []).filter(p => !q || norm(p.name).includes(q) || norm(firstLast(p.name)).includes(q)).map(p => {
+      const rp = rosterOf(p.name), out = rp && rp.cancelled;
+      return '<div class="linkrow vlrow"><div class="grow"><strong>' + esc(firstLast(p.name)) + '</strong>' + (p.tag ? ' <span class="deptpill">' + esc(p.tag) + '</span>' : '') +
+      (out ? ' <span class="outpill">🚫 Cancelled</span>' : '') +
+      (p.phone ? '<div class="small muted">' + esc(p.phone) + '</div>' : '<div class="small muted">No phone on file</div>') + '</div><div class="vlbtns">' +
+      sendLinkBtn(p.name, p.phone, 'btn sm xs') +
+      (p.phone ? '<a class="btn sm xs line" href="' + smsHref(p.phone) + '">Text</a><a class="btn sm xs ghost" href="' + telHref(p.phone) + '">Call</a>' : '') +
+      (p.email && linkable(p.name) ? '<a class="btn sm xs ghost" href="' + esc(linkMail(p.name, p.email)) + '">Email</a>' : '') +
+      (d.me.all && LINKS[norm(p.name)] ? '<button class="btn sm xs ghost" data-newlink="' + esc(p.name) + '">🔄 Generate New Link</button>' : '') +
+      (!canCancel(p.name) ? '' : out ? '<button class="btn sm xs line" data-back="' + esc(p.name) + '">↩ Add back to roster</button>'
+           : '<button class="btn sm xs danger" data-noshow="' + esc(p.name) + '">🚫 Cancellation/No-show</button>') + '</div></div>';
+    }).join('') || '<p class="muted">No one matches that name.</p>';
+  };
+  $('#cq').oninput = paint; paint();
+  $('#pane').onclick = e => {
+    const ns = e.target.closest('[data-noshow]'), back = e.target.closest('[data-back]'), cp = e.target.closest('[data-copy]'), nl = e.target.closest('[data-newlink]');
+    if (cp) copy(cp.dataset.copy);
+    else if (nl) confirmNewLink(nl.dataset.newlink);
+    else if (ns) confirmNoShow(ns.dataset.noshow, todayLines(rosterOf(ns.dataset.noshow)));
+    else if (back) allowAgain(back, back.dataset.back);
+  };
+}
+
+/* =========================================================
+   CHECK IN / CHECK OUT — badges in the morning, returned at the end of the day
+   ========================================================= */
+// CI.who: { mode: 'leader' | 'checker', name, all, sections }
+const CI = { people: [], status: {}, checkers: [], recent: {}, who: null, timer: null };
+
+function ciInit(data, who) {
+  if (!data) return;
+  CI.people = data.people || []; CI.status = data.status || {}; CI.checkers = data.checkers || []; CI.who = who;
+}
+function ciCall(req) {
+  req = Object.assign({ checkin: true }, req);
+  return CI.who.mode === 'checker' ? call('apiVolunteer', CI.who.code, req) : call('apiEdit', L.code, req);
+}
+function ciStart(paint) { ciStop(); CI.timer = setInterval(() => ciCall({ op: 'poll' }).then(res => { if (res && res.ok) { ciTake(res); paint(); } }, () => {}), 10000); }
+function ciStop() { if (CI.timer) { clearInterval(CI.timer); CI.timer = null; } }
+function ciTake(res) { CI.status = res.status || {}; if (res.checkers) CI.checkers = res.checkers; }
+
+// what the screen shows: saved status plus taps that are still saving (or just saved)
+function ciState(key) {
+  const r = CI.recent[key];
+  if (r && (r.pending || Date.now() - r.t < 20000)) return r.st;
+  return CI.status[key] || {};
+}
+function ciNowText() { const d = new Date(); return fmt(d.getHours() * 60 + d.getMinutes()); }
+function ciTap(name, op, repaint, next) {
+  const key = norm(name), cur = ciState(key), now = ciNowText(), me = CI.who.name;
+  const st = op === 'in' ? Object.assign({}, cur, { in: cur.in || now, inBy: cur.inBy || me })
+    : op === 'out' ? Object.assign({}, cur, { in: cur.in || now, inBy: cur.inBy || me, out: now, outBy: me, next: next || '' })
+    : op === 'undoOut' ? { in: cur.in, inBy: cur.inBy } : {};
+  CI.recent[key] = { st: st, pending: true, t: Date.now() };
+  repaint();   // instant: no waiting for the server
+  PENDING++;   // (warns before closing the page; no schedule refresh needed afterwards)
+  ciCall({ op: op, name: name, next: next || '' }).then(res => {
+    endSave(false);
+    if (!res || !res.ok) { delete CI.recent[key]; repaint(); toast((res && res.error) || 'Not saved — try again'); return; }
+    CI.recent[key] = { st: st, pending: false, t: Date.now() };
+    ciTake(res); repaint();
+  }, () => { endSave(false); delete CI.recent[key]; repaint(); toast('Not saved — check your signal and try again'); });
+}
+
+function ciLetter(name) { const c = String(name).trim().charAt(0).toUpperCase(); return c >= 'A' && c <= 'Z' ? c : 'Z'; }
+// Split A–Z into one range per badge checker, as evenly as the last names allow
+function ciRanges() {
+  const k = CI.checkers.length;
+  if (!k) return [];
+  const counts = new Array(26).fill(0);
+  CI.people.forEach(p => counts[ciLetter(p.name).charCodeAt(0) - 65]++);
+  const total = CI.people.length, cum = []; let run = 0;
+  counts.forEach((c, i) => { run += c; cum[i] = run; });
+  const out = []; let start = 0;
+  for (let g = 0; g < k; g++) {
+    let end = 25;
+    if (g < k - 1) {
+      const target = total * (g + 1) / k, last = 25 - (k - 1 - g);
+      end = start; let best = Infinity;
+      for (let c = start; c <= last; c++) { const d = Math.abs(cum[c] - target); if (d < best) { best = d; end = c; } }
+    }
+    const from = String.fromCharCode(65 + start), to = String.fromCharCode(65 + end);
+    out.push({ name: CI.checkers[g], from: from, to: to, label: from === to ? from : from + '–' + to,
+      n: (cum[end] || 0) - (start ? cum[start - 1] : 0) });
+    start = end + 1;
+  }
+  return out;
+}
+function ciMyRange() { return ciRanges().filter(r => norm(r.name) === norm(CI.who.name))[0] || null; }
+
+// next time this person is needed (for the "not checked in" list)
+function ciNeeded(p) {
+  const now = nowInfo();
+  if (!p.b.length) return { sort: 99999, text: 'No shifts scheduled', cls: '' };
+  if (now !== null) {
+    const on = p.b.filter(b => b[0] <= now && (b[1] == null || now < b[1]))[0];
+    if (on) return { sort: -1, text: '⚠ On duty now: ' + on[2] + ' (since ' + fmt(on[0]) + ')', cls: 'late' };
+    const nx = p.b.filter(b => b[0] > now)[0];
+    return nx ? { sort: nx[0], text: 'Next: ' + fmt(nx[0]) + ' · ' + nx[2], cls: '' } : { sort: 99998, text: 'No more shifts today', cls: '' };
+  }
+  return { sort: p.b[0][0], text: 'First shift: ' + fmt(p.b[0][0]) + ' · ' + p.b[0][2], cls: '' };
+}
+
+function paintCheckin(root, onBack) {
+  const who = CI.who, range = ciMyRange();
+  // start on My letters for badge checkers, otherwise My sections for keymen, otherwise everyone
+  if (UI.ciScope == null) UI.ciScope = range ? 'mine' : (!who.all && who.mode === 'leader' && (who.sections || []).length ? 'sections' : 'all');
+  if (!UI.ciView) UI.ciView = 'all';
+  let h = '';
+  if (onBack) h += '<button class="btn sm line" id="ciback" style="margin-bottom:12px">← Back to my schedule</button>';
+  h += '<div class="card"><p class="eyebrow">Check In / Check Out</p><div class="cistats" id="cistats"></div>' +
+    (range ? '<p class="small" style="margin:10px 0 0">You check in last names <strong>' + esc(range.label) + '</strong>. You can still check in anyone.</p>' : '') + '</div>';
+  if (who.all) h += ciCheckerCard();
+  const scopes = [];
+  if (range) scopes.push(['mine', 'My letters (' + range.label + ')']);
+  if (!who.all && who.sections && who.sections.length && who.mode === 'leader') scopes.push(['sections', 'My sections']);
+  if (scopes.length) scopes.push(['all', 'Everyone']);
+  if (!scopes.some(s => s[0] === UI.ciScope)) UI.ciScope = 'all';
+  const views = [['all', 'All'], ['missing', 'Missing Check-in'], ['in', 'Checked in'], ['out', 'Badge returned']];
+  h += '<div class="card">' +
+    (scopes.length ? '<div class="chips">' + scopes.map(s => '<button class="chip ' + (UI.ciScope === s[0] ? 'on' : '') + '" data-ciscope="' + s[0] + '">' + esc(s[1]) + '</button>').join('') + '</div>' : '') +
+    '<div class="seg ciseg">' + views.map(v => '<button data-ciview="' + v[0] + '" class="' + (UI.ciView === v[0] ? 'on' : '') + '">' + v[1] + '</button>').join('') + '</div>' +
+    '<input type="search" id="ciq" placeholder="Search names…" autocomplete="off" style="margin-top:10px"><div id="cirows" style="margin-top:8px"></div></div>';
+  root.innerHTML = h;
+  $('#ciq').value = UI.ciq || '';
+  const repaint = () => ciRows();
+  $('#ciq').oninput = () => { UI.ciq = $('#ciq').value; repaint(); };
+  root.querySelectorAll('[data-ciscope]').forEach(b => b.onclick = () => { UI.ciScope = b.dataset.ciscope; paintCheckin(root, onBack); });
+  root.querySelectorAll('[data-ciview]').forEach(b => b.onclick = () => { UI.ciView = b.dataset.ciview; paintCheckin(root, onBack); });
+  $('#cirows').onclick = e => {
+    const b = e.target.closest('[data-ciop]');
+    if (!b) return;
+    if (b.dataset.ciop === 'out') ciReturnAsk(b.dataset.ciname, repaint);
+    else ciTap(b.dataset.ciname, b.dataset.ciop, repaint);
+  };
+  if (onBack) $('#ciback').onclick = () => { ciStop(); onBack(); };
+  if (who.all) bindCheckerCard(root, onBack);
+  repaint();
+  ciStart(repaint);
+}
+
+function ciRows() {
+  if (!$('#cirows')) { ciStop(); return; }
+  const range = ciMyRange(), q = norm(UI.ciq || '');
+  // the totals follow the chosen group (My letters / My sections / Everyone)
+  const scoped = CI.people.filter(p => {
+    if (UI.ciScope === 'mine' && range) { const c = ciLetter(p.name); if (c < range.from || c > range.to) return false; }
+    if (UI.ciScope === 'sections') { const mine = (CI.who.sections || []).map(norm); if (!p.sec.some(s => mine.indexOf(norm(s)) >= 0)) return false; }
+    return true;
+  });
+  let inN = 0, outN = 0;
+  scoped.forEach(p => { const st = ciState(norm(p.name)); if (st.in) inN++; if (st.out) outN++; });
+  $('#cistats').innerHTML = '<div><b>' + inN + '</b><span>Checked in</span></div><div class="miss"><b>' + (scoped.length - inN) + '</b><span>Not checked in</span></div><div><b>' + outN + '</b><span>Badges returned</span></div>';
+  let list = scoped.filter(p => {
+    if (q && !norm(p.name).includes(q) && !norm(firstLast(p.name)).includes(q)) return false;
+    const st = ciState(norm(p.name));
+    return UI.ciView === 'all' || (UI.ciView === 'missing' && !st.in) || (UI.ciView === 'in' && st.in && !st.out) || (UI.ciView === 'out' && st.out);
+  });
+  if (UI.ciView === 'missing') list = list.map(p => ({ p: p, need: ciNeeded(p) })).sort((a, b) => a.need.sort - b.need.sort).map(x => x.p);
+  $('#cirows').innerHTML = list.map(p => {
+    const st = ciState(norm(p.name)), parts = p.name.split(',');
+    const nm = '<strong>' + esc(parts[0].trim()) + '</strong>' + (parts[1] ? ', ' + esc(parts[1].trim()) : '');
+    let info, btns;
+    const last = parts[0].trim(), text = msg => p.ph ? '<a class="btn sm xs ghost" href="' + smsHref(p.ph, msg) + '">Text</a>' : '';
+    if (st.out) { info = '<span class="cires out">↩ Badge returned ' + esc(st.out) + (st.next ? ' · Next time: ' + esc(st.next) : '') + '</span>'; btns = '<button class="btn sm xs ghost" data-ciop="undoOut" data-ciname="' + esc(p.name) + '">Undo</button>'; }
+    else if (st.in) { info = '<span class="cires in">✓ Checked in ' + esc(st.in) + (st.inBy ? ' · ' + esc(firstLast(st.inBy).split(' ')[0]) : '') + '</span>';
+      btns = (UI.ciView === 'in' ? text('Hey brother ' + last + '. Our records show you still have a badge checked out. Please let us know if you have the badge still or if you turned it back in.') : '') +
+        '<button class="btn sm xs line" data-ciop="out" data-ciname="' + esc(p.name) + '">Badge Returned</button><button class="btn sm xs ghost" data-ciop="undoIn" data-ciname="' + esc(p.name) + '">Undo</button>'; }
+    else { const need = ciNeeded(p); info = '<span class="small ' + (need.cls === 'late' ? 'cilate' : 'muted') + '">' + esc(need.text) + '</span>';
+      btns = text('Hey brother ' + last + '. Our records show you haven’t checked in and received a badge yet. Please come to the attendant desk to get your badge. If you already received a badge, just let us know and we will correct our records.') +
+        '<button class="btn sm" data-ciop="in" data-ciname="' + esc(p.name) + '">Check in</button>'; }
+    return '<div class="cirow' + (st.in ? ' done' : '') + '"><div class="grow">' + nm + '<div>' + info + '</div></div><div class="cibtns">' + btns + '</div></div>';
+  }).join('') || '<p class="muted">' + (q ? 'No one matches that name.' : 'No one here.') + '</p>';
+}
+
+// "Badge Returned" asks whether he'd serve next time; Yes adds him to a tab on the Master Contact Sheet
+function ciReturnAsk(name, repaint) {
+  openSheet('<div class="big">Badge returned · ' + esc(firstLast(name)) + '</div><p style="margin:10px 0 14px">Is this brother willing to serve as an attendant next assembly?</p>' +
+    '<div class="cinext"><button class="btn" data-next="Yes">Yes</button><button class="btn line" data-next="No">No</button><button class="btn line" data-next="Unsure">Unsure</button></div>' +
+    '<button class="btn ghost" style="width:100%;margin-top:10px" onclick="closeSheet()">Cancel</button>');
+  document.querySelectorAll('[data-next]').forEach(b => b.onclick = () => { closeSheet(); ciTap(name, 'out', repaint, b.dataset.next); });
+}
+
+// Overseers: choose the badge checkers (last names split between them in this order)
+function ciCheckerCard() {
+  const rs = ciRanges();
+  let h = '<div class="card"><button class="collhead" id="cctoggle"><span class="grow"><span class="eyebrow" style="margin:0">Badge checkers</span><span class="small muted" style="display:block">' +
+    (rs.length ? esc(rs.map(r => firstLast(r.name).split(' ')[0] + ' ' + r.label).join(' · ')) : 'No one assigned yet') + '</span></span><span class="plus">' + (UI.ccOpen ? '−' : '+') + '</span></button>';
+  if (UI.ccOpen) {
+    h += '<p class="small muted" style="margin:10px 0 8px">Last names are split as evenly as possible, in this order. Badge checkers see a Check In/Out button on their own schedule page.</p>' +
+      rs.map((r, i) => '<div class="linkrow"><div class="grow"><strong>' + esc(firstLast(r.name)) + '</strong><div class="small muted">Last names ' + esc(r.label) + ' · ' + r.n + ' people</div></div>' +
+        (i ? '<button class="btn sm xs line" data-ccup="' + i + '">↑</button>' : '') + '<button class="btn sm xs ghost" data-ccdel="' + i + '">Remove</button></div>').join('') +
+      '<div class="row" style="gap:8px;margin-top:10px"><select id="ccadd" class="grow"><option value="">Add a badge checker…</option>' +
+      CI.people.filter(p => !CI.checkers.some(c => norm(c) === norm(p.name))).map(p => '<option>' + esc(p.name) + '</option>').join('') + '</select>' +
+      '<button class="btn sm" id="ccaddbtn">Add</button></div>' +
+      '<button class="btn sm danger" id="ciclear" style="margin-top:14px">Clear all check-ins…</button>';
+  }
+  return h + '</div>';
+}
+function bindCheckerCard(root, onBack) {
+  const again = () => paintCheckin(root, onBack);
+  $('#cctoggle').onclick = () => { UI.ccOpen = !UI.ccOpen; again(); };
+  if (!UI.ccOpen) return;
+  const save = list => { CI.checkers = list; again(); ciCall({ op: 'setCheckers', checkers: list }).then(res => { if (res && res.ok) { ciTake(res); again(); } else toast((res && res.error) || 'Not saved'); }); };
+  root.querySelectorAll('[data-ccdel]').forEach(b => b.onclick = () => save(CI.checkers.filter((c, i) => i !== Number(b.dataset.ccdel))));
+  root.querySelectorAll('[data-ccup]').forEach(b => b.onclick = () => { const l = CI.checkers.slice(), i = Number(b.dataset.ccup); [l[i - 1], l[i]] = [l[i], l[i - 1]]; save(l); });
+  $('#ccaddbtn').onclick = () => { const v = $('#ccadd').value; if (v) save(CI.checkers.concat([v])); };
+  $('#ciclear').onclick = () => {
+    openSheet('<div class="big" style="color:var(--warn)">⚠ Clear all check-ins?</div><p style="margin:10px 0 14px">This erases every check-in and check-out for everyone (for example, after testing). It can’t be undone.</p>' +
+      '<div class="btns"><button class="btn danger" id="yesclear">Yes, clear all</button><button class="btn line" onclick="closeSheet()">Cancel</button></div>');
+    $('#yesclear').onclick = () => { busy($('#yesclear'), 'Clearing…'); ciCall({ op: 'clearAll' }).then(res => { closeSheet(); if (res && res.ok) { CI.recent = {}; ciTake(res); toast('All check-ins cleared'); again(); } else toast((res && res.error) || 'Not cleared'); }); };
+  };
+}
+
+/* ---------- new version: reload so no one keeps using an old copy of the page ---------- */
+// Every 2 minutes, and whenever the page comes back on screen, ask the server for its version.
+// If it changed, reload on our own when nothing is in progress; otherwise (or if the browser blocks it) show a bar to tap.
+let NEWVER = false;
+function checkBuild() {
+  if (NEWVER || !BOOT.build) return;
+  call('apiVolunteer', '', { build: true }).then(r => { if (r && r.build && r.build !== BOOT.build) newVersion(); }, () => {});
+}
+function newVersion() {
+  NEWVER = true;
+  const code = (L && L.code) || VCODE || BOOT.code;
+  const url = code ? leaderLink(code) : (BOOT.shared ? BOOT.pageUrl + '?app=' + BOOT.app : BOOT.appUrl);
+  const bar = document.createElement('a');
+  bar.className = 'newver'; bar.href = url; bar.target = '_top';
+  bar.textContent = '✨ This page was updated. Tap here to load the new version.';
+  document.body.appendChild(bar);
+  const a = document.activeElement;
+  const busyNow = PENDING || $('#sheet').classList.contains('show') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName));
+  if (!busyNow) { try { window.top.location.href = url; } catch (e) { /* blocked: the bar stays */ } }
+}
+setInterval(checkBuild, 120000);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
+
+/* ---------- start ---------- */
+$('#foot').textContent = 'Attendant Department';
+if (BOOT.code) leader(BOOT.code);
+else if (BOOT.name) home('Personal links now use an access code, so this older link no longer works. Ask your keyman or the overseers for your current link.');
+else home();
+</script>
+</body>
+</html>

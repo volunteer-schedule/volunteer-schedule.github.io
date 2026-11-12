@@ -1,0 +1,2161 @@
+/**
+ * ATTENDANT SCHEDULE WEB PAGES
+ * -----------------------------------------------------------
+ * Reads the "Schedule" and "Web Settings" tabs of this spreadsheet
+ * (plus phone, age, and scheduling limitations from the Master Contact Sheet) and serves:
+ *   - Volunteer page:  ...exec?code=THEIRCODE (codes are on the Master Contact Sheet)
+ *   - Keyman page:     ...exec?code=THEIRCODE
+ *   - Overseer page:   ...exec?code=OVERSEERCODE
+ *
+ * You should never need to edit this file. Everything you change
+ * day to day lives in the Schedule and Web Settings tabs.
+ */
+
+// Version of this server code. Bump it in a release whose notes need copies to update their Code.gs
+// (and set latestServer to match in releases.json on the shared page), so their overseers see "update available".
+const APP_VERSION = '1.7';
+
+const SCHEDULE_TAB = 'Schedule';
+const SETTINGS_TAB = 'Web Settings';
+const LEADER_HEADER = 'name (last, first)';
+
+/* ============================ PAGE ============================ */
+
+function doGet(e) {
+  const p = (e && e.parameter) || {};
+  if (p.doc) return docPage_(p.doc);
+  const t = HtmlService.createTemplateFromFile('Index');
+  // getUrl() adds /u/1/ etc. when signed into several Google accounts; strip it so shared links open for everyone
+  const appUrl = ScriptApp.getService().getUrl().replace(/\/u\/\d+\//g, '/');
+  rememberExecUrl_(appUrl);
+  t.bootJson = JSON.stringify({
+    name: p.name || '',
+    code: p.code || '',
+    now: p.now || '', // optional, for testing: &now=10:15 AM pretends it is the event day at that time
+    appUrl: appUrl,
+    build: buildStamp_()
+  }).replace(/</g, '\\u003c');
+  return t.evaluate()
+    .setTitle('Attendant Schedule')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+/* ================= DATA DOOR FOR THE SHARED PAGE ================= */
+// The shared page on GitHub (volunteer-schedule.github.io) can't use google.script.run, so it sends
+// {fn, args} here as a POST and gets JSON back. Only the functions the page already calls are allowed.
+const API_FNS = ['apiHome', 'apiVolunteer', 'apiLeader', 'apiMap', 'apiEdit', 'apiNoShow', 'apiAllowAgain', 'apiIgnore', 'apiReview', 'apiMarkSeen'];
+
+function doPost(e) {
+  let out;
+  try {
+    const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
+    const fn = API_FNS.indexOf(req.fn) >= 0 ? globalThis[req.fn] : null;
+    out = fn ? { result: fn.apply(null, Array.isArray(req.args) ? req.args : []) } : { error: 'Unknown request.' };
+  } catch (err) {
+    console.error('Shared page request failed: ' + err);
+    out = { error: String((err && err.message) || err) };
+  }
+  return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
+}
+
+/** A short fingerprint of this version's page. Open pages compare it to notice a new deploy and reload. */
+function buildStamp_() {
+  try {
+    const raw = HtmlService.createTemplateFromFile('Index').getRawContent();
+    return Utilities.base64EncodeWebSafe(Utilities.computeDigest(Utilities.DigestAlgorithm.MD5, raw)).slice(0, 12);
+  } catch (e) {
+    return '';   // no fingerprint = pages just don't auto-update; never break the page over it
+  }
+}
+
+/* ======================= CALLED BY PAGE ======================= */
+
+/** Home page: event info only. Everyone opens their own page with their access code. */
+function apiHome() {
+  const s = readSettings_();
+  // a new copy has no codes yet: opening the plain link once fills them in on the Master Contact Sheet
+  ensureCodes_(s, readContacts_(s));
+  ensureLinkCol_(s);
+  ensureDataSourceSync_(s);
+  return { event: publicEvent_(s) };
+}
+
+/** One volunteer's own schedule. code is their access code (from their link). */
+function apiVolunteer(code, req) {
+  // any open page asks this now and then: has a new version been deployed?
+  if (req && req.build) return { build: buildStamp_() };
+  const s = readSettings_();
+  if (linksInactive_(s)) return req ? { ok: false, error: 'Schedule links for this event are no longer active.' } : { event: publicEvent_(s), found: false, inactive: true };
+  // (wrong codes are counted when the page first opens, in apiLeader; an old link refreshing here isn't counted)
+  const name = codeOwner_(code, s);
+  if (!name) {
+    return req ? { ok: false, error: 'Your link is no longer active. Ask your keyman or the overseers for your current link.' } : { event: publicEvent_(s), found: false, badLink: true };
+  }
+  if (req && (req.checkin || req.tally) && !featureOn_(s, req.checkin ? 'useBadgeCheckIn' : 'useAttendanceCounts'))
+    return { ok: false, error: 'This feature is turned off.' };
+  // badge checkers use their volunteer page for check-in (see CHECK IN / CHECK OUT below)
+  if (req && req.checkin) return checkinAction_({ name: toLastFirst_(name || ''), checker: true }, req);
+  // counters submit their spot's attendance number from their own page
+  if (req && req.tally) return saveTally_({ name: toLastFirst_(name || '') }, req);
+  const sched = readSchedule_();
+  const key = norm_(toLastFirst_(name || ''));
+  const mine = sched.assignments.filter(a => a.key === key);
+  const event = publicEvent_(s);
+  if (isBlocked_(mine, s)) return { event: event, found: false, blocked: true };
+  // A personal link only works while the person is on the FIRST tab of the Master Contact Sheet.
+  // Remove them from that tab and their link stops working, even if they still have shifts.
+  const book = readContacts_(s);
+  if (!book[key] || !book[key].onFirstTab) return { event: event, found: false, name: name };
+  if (!mine.length) {
+    const leadersAll = readLeaders_();
+    const show = String(s.showOversightKeymenPhonesToVolunteers || s.showLeaderPhonesToVolunteers).toUpperCase() === 'TRUE';
+    const team = leadersAll.filter(l => l.key !== key).map(l => ({
+      name: l.name,
+      department: l.department || (l.all ? l.role : l.sections.join(', ')),
+      phone: show ? ((book[l.key] && book[l.key].phone) || '') : '',
+      order: l.all ? 2 : 1
+    })).sort((a, b) => a.order - b.order);
+    return { event: event, found: true, unassigned: true, name: book[key].name, team: team, docs: publicDocs_(s), meeting: meeting_(s) };
+  }
+
+  const display = mine[0].name;
+  const blocks = buildBlocks_(mine, sched, s);
+  addPartners_(blocks, sched, s, key, book);
+  const sections = uniq_(mine.map(a => a.section));
+
+  // Who to contact: keyman for each of their sections, then overseers
+  const leaders = readLeaders_();
+  const showPhones = String(s.showOversightKeymenPhonesToVolunteers || s.showLeaderPhonesToVolunteers).toUpperCase() === 'TRUE';
+  const phones = showPhones ? readPhones_(s) : {};
+  const contacts = [];
+  leaders.forEach(l => {
+    if (l.key === key) return;
+    const isOverseer = l.all;
+    const coversMe = !l.all && l.sections.some(x => sections.map(norm_).indexOf(norm_(x)) >= 0);
+    if (!isOverseer && !coversMe) return;
+    contacts.push({
+      name: l.name,
+      role: l.all ? (l.department || l.role) : ('Keyman · ' + (l.department || l.sections.filter(x => sections.map(norm_).indexOf(norm_(x)) >= 0).join(', '))),
+      phone: showPhones ? (phones[l.key] || '') : '',
+      primary: !l.all,
+      order: l.all ? 2 : 1
+    });
+  });
+  contacts.sort((a, b) => a.order - b.order);
+
+  const notes = {};
+  sections.forEach(sec => { if (sched.sectionNotes[sec]) notes[sec] = sched.sectionNotes[sec]; });
+
+  return {
+    event: event, found: true, name: display,
+    blocks: blocks, contacts: contacts, sectionNotes: notes,
+    docs: publicDocs_(s), meeting: meeting_(s),
+    // red box on the day's last shift (Web Settings: Last Shift Warning). Left blank = no box;
+    // copies of the sheet that don't have that row yet get the usual reminder.
+    lastShiftWarning: 'lastShiftWarning' in s ? s.lastShiftWarning : 'Do not leave your shift after the program until you are relieved by keyman/oversight.',
+    counts: featureOn_(s, 'useAttendanceCounts') ? countsFor_(s, sched, key, null) : [],
+    checkin: featureOn_(s, 'useBadgeCheckIn') && readCheckers_().some(n => norm_(n) === key) ? checkinData_(s, sched, readLeaders_(), book) : null
+  };
+}
+
+/** Sections that work in pairs (Web Settings, e.g. Exteriors): each shift lists who else is out there at the same time, with their number. */
+function addPartners_(blocks, sched, s, key, book) {
+  const paired = splitList_(s.sectionsThatWorkInPairs).map(norm_);
+  blocks.forEach(b => {
+    if (paired.indexOf(norm_(b.section)) < 0) return;
+    const slots = uniq_(b.cells.map(c => c[1]));
+    const who = {};
+    sched.assignments.filter(a => a.key !== key && norm_(a.section) === norm_(b.section) && slots.indexOf(a.slot) >= 0)
+      .forEach(a => { const w = who[a.key] = who[a.key] || { name: a.name, slots: [] }; if (w.slots.indexOf(a.slot) < 0) w.slots.push(a.slot); });
+    b.partners = Object.keys(who).map(k => {
+      const w = who[k].slots.sort((x, y) => x - y), last = sched.slots[w[w.length - 1]];
+      return { name: who[k].name, phone: (book[k] && book[k].phone) || '',
+        // only say when if they're not with you for the whole shift
+        time: w.length === slots.length ? '' : sched.slots[w[0]].label + (last.end != null ? ' – ' + fmtTime_(last.end) : '') };
+    }).sort((x, y) => nameSort_(x.name, y.name));
+  });
+}
+
+/** Keyman / overseer view. Returns nothing useful without a valid code. */
+function apiLeader(code) {
+  if (tooManyFailures_()) return { ok: false, locked: true };
+  const leaders = readLeaders_();
+  const c = String(code || '').trim().toUpperCase();
+  const me = c ? leaders.filter(l => l.code && l.code === c)[0] : null;
+  const s = readSettings_();
+  if (!me) {
+    if (codeOwner_(c, s)) return linksInactive_(s) ? { ok: false, inactive: true } : { ok: false, volunteer: true };
+    recordFailure_(); return { ok: false };
+  }
+  if (!me.all && linksInactive_(s)) return { ok: false, inactive: true };
+  if (me.all) { ensureDataSourceSync_(s); ensureCodes_(s, readContacts_(s)); ensureLinkCol_(s); }
+  const sched = readSchedule_();
+  const phones = readPhones_(s);
+
+  const inScope = sec => me.all || me.sections.map(norm_).indexOf(norm_(sec)) >= 0;
+  const rows = sched.rows.filter(r => inScope(r.section));
+  const sections = uniq_(rows.map(r => r.section));
+
+  // keyman name for each section (for headings)
+  const sectionLeads = {};
+  leaders.filter(l => !l.all).forEach(l => l.sections.forEach(sec => {
+    const real = sections.filter(x => norm_(x) === norm_(sec))[0];
+    if (real) (sectionLeads[real] = sectionLeads[real] || []).push(l.name);
+  }));
+
+  // phone book: everyone visible on this page + all leaders
+  const people = {};
+  rows.forEach(r => r.cells.forEach(cell => cell.forEach(n => { people[norm_(n)] = n; })));
+  leaders.forEach(l => { people[l.key] = l.name; });
+  const book = {};
+  Object.keys(people).forEach(k => { book[k] = { name: people[k], phone: phones[k] || '' }; });
+
+  const myAssign = sched.assignments.filter(a => a.key === me.key);
+  const out = {
+    ok: true,
+    event: publicEvent_(s),
+    me: { name: me.name, role: me.role, all: me.all, sections: me.all ? ['ALL'] : me.sections },
+    slots: sched.slots,
+    rows: rows,
+    sections: sections,
+    sectionLeads: sectionLeads,
+    sectionNotes: sched.sectionNotes,
+    book: book,
+    myBlocks: myAssign.length ? buildBlocks_(myAssign, sched, s) : [],
+    docs: publicDocs_(s),
+    meeting: meeting_(s),
+    people: peopleBlocks_(sched, s, rows),
+    loadedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'h:mm a')
+  };
+
+  // People this leader can put into a spot, with every time slot they're already busy
+  // keymen: brothers on their own team; overseers: everyone
+  const contactsAll = readContacts_(s);
+  addPartners_(out.myBlocks, sched, s, me.key, contactsAll);
+  const myCancelled = me.all ? [] : cancelledFor_(me).map(c => c.name);
+  out.roster = roster_(sched, s, leaders, contactsAll, me.all ? null : rows, myCancelled);
+  const codes = readCodes_(s);
+  out.links = {};
+  (me.all ? Object.keys(codes) : out.roster.map(p => norm_(p.name))).forEach(k => { if (codes[k]) out.links[k] = codes[k]; });
+  out.hiddenSections = hiddenSections_(s);
+  // time slots where unfilled spots are never "open" (only what's scheduled matters)
+  const noOpen = splitList_(s.slotsWithoutOpenSpots || '').map(parseTime_);
+  out.noOpenSlots = sched.slots.map((sl, k) => k).filter(k => noOpen.indexOf(sched.slots[k].start) >= 0);
+  // ...except where someone was removed or cancelled from that early spot: that's a real opening to fill
+  out.vacated = vacatedEarly_(sched, out.noOpenSlots);
+  // open spots a leader chose to leave unscheduled (with their note), for the sections on this page
+  out.unscheduled = readUnscheduled_().filter(u => inScope(u.section));
+  // spots cut back on purpose when traffic dies down (not open; the brother before leaves without relief)
+  out.reduced = readReduced_().filter(u => inScope(u.section));
+  // "What's new" card: release notes from the Release Notes tab
+  try { out.releases = readReleaseNotes_(me.all); } catch (e) { out.releases = []; }
+  out.appVersion = APP_VERSION;   // the page compares it with the shared release notes
+  // what this leader has already read (What's new, Conflicts), saved on the server so it survives browser resets
+  out.seen = readSeen_(me);
+  // attendance count times: overseers always get them (to set them); others only if they count
+  // either feature can be switched off on Web Settings; then it's left out of every page
+  out.features = { counts: featureOn_(s, 'useAttendanceCounts'), checkin: featureOn_(s, 'useBadgeCheckIn') };
+  out.checkin = out.features.checkin ? checkinData_(s, sched, leaders, contactsAll) : null;
+  out.counts = !out.features.counts ? [] : me.all ? countTotals_(s, sched) : countsFor_(s, sched, me.key, me);
+  out.countSpotsText = s.attendanceCountSpots || '';
+
+  if (!me.all) {
+    // Volunteer List: everyone in this keyman's sections, plus people cancelled from them
+    out.contactList = out.roster.filter(p => !leaders.some(l => l.all && l.key === norm_(p.name)))
+      .map(p => ({ name: p.name, phone: p.phone, tag: p.keyman ? 'Keyman' : '' }));
+  }
+  if (me.all) {
+    out.cancelled = readCancelledList_();
+    out.issues = findIssues_(sched, s, leaders, phones, contactsAll);
+    const ignored = readIgnored_();
+    out.issues.forEach(i => { if (i.key && ignored[i.key]) i.ignored = true; });
+    out.changes = readChanges_();
+    const contacts = contactsAll;
+    const everyone = {};
+    sched.assignments.forEach(a => { everyone[a.key] = a.name; });
+    Object.keys(everyone).forEach(k => { if (isBlocked_(sched.assignments.filter(a => a.key === k), s)) delete everyone[k]; });
+    // links only work for people on the first tab of the contact sheet, so only list them
+    Object.keys(everyone).forEach(k => { if (!contacts[k] || !contacts[k].onFirstTab) delete everyone[k]; });
+    unassigned_(s, sched, leaders, contacts).forEach(c => { everyone[norm_(c.name)] = c.name; });
+    const info = k => contacts[k] || {};
+    out.leaderLinks = leaders.filter(l => l.code).map(l => ({ name: l.name, role: l.role, department: l.department, all: l.all, code: l.code, phone: info(l.key).phone || '' }));
+    // other overseers get CC'd on emails sent from this view
+    out.ccEmails = leaders.filter(l => l.all && l.key !== me.key).map(l => info(l.key).email).filter(Boolean);
+    // full contact list (volunteers, unassigned, keymen, overseers)
+    const all = {};
+    Object.keys(everyone).forEach(k => { all[k] = everyone[k]; });
+    // keymen/overseers only if they're a real person (not a placeholder like "Contact Overseers Below")
+    leaders.forEach(l => { if (contacts[l.key] || sched.assignments.some(a => a.key === l.key)) all[l.key] = l.name; });
+    out.contactList = Object.keys(all).map(k => ({ name: all[k], phone: info(k).phone || '', email: info(k).email || '',
+      tag: (leaders.filter(l => l.key === k)[0] || {}).department || '' })).sort((a, b) => nameSort_(a.name, b.name));
+  }
+  return out;
+}
+
+/* ========================= DOCUMENTS ========================= */
+
+const DOCS = [
+  { key: 'assign', label: 'Assignment Map', setting: 'mapImageLink' },
+  { key: 'dept', label: 'Department Directory', setting: 'departmentLocationsLink' },
+  { key: 'evac', label: 'Evacuation Maps', setting: 'evacuationMapsLink' }
+];
+
+/** Sections whose people don't get volunteer pages (e.g. greeters). */
+function hiddenSections_(s) {
+  return splitList_(s.hideFromVolunteerPages || s.hideFromVolunteerNameList).map(norm_);
+}
+/** True when every assignment this person has is in a hidden section. */
+function isBlocked_(list, s) {
+  const hidden = hiddenSections_(s);
+  return list.length > 0 && list.every(a => hidden.indexOf(norm_(a.section)) >= 0);
+}
+
+/** The morning meeting card (from Web Settings), or null if no time is set. */
+function meeting_(s) {
+  const t = parseTime_(s.morningMeetingTime || '');
+  if (t === null) return null;
+  return { min: t, time: fmtTime_(t), place: s.morningMeetingPlace || '', note: s.morningMeetingNote || '' };
+}
+
+/** Which document buttons to show (only ones with a link in Web Settings). */
+function publicDocs_(s) {
+  return DOCS.filter(d => String(s[d.setting] || '').match(/[-\w]{25,}/)).map(d => ({ key: d.key, label: d.label }));
+}
+
+/** A simple full-page view of one document image; opened in a new tab. */
+function docPage_(key) {
+  const s = readSettings_();
+  const doc = DOCS.filter(d => d.key === key)[0];
+  const ev = publicEvent_(s);
+  let body = '<p style="padding:24px;font-family:sans-serif">This document isn’t available.</p>';
+  if (doc) {
+    const ids = String(s[doc.setting] || '').match(/[-\w]{25,}/g) || [];
+    const imgs = ids.map(id => {
+      try {
+        const blob = DriveApp.getFileById(id).getBlob();
+        return '<img alt="' + doc.label + '" src="data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes()) + '">';
+      } catch (err) { return ''; }
+    }).join('');
+    if (imgs) body = '<header><div class="bar"></div><h1>' + doc.label.replace('View ', '') + '</h1><p>' + (ev.date || '') + ' · ' + (ev.department || '') +
+      '</p><p class="tip">Pinch or zoom to see details.</p></header><main>' + imgs + '</main>';
+  }
+  const html = '<!DOCTYPE html><html><head><meta charset="utf-8"><style>' +
+    'body{margin:0;background:#F1F1F1;color:#292929;font-family:"Noto Sans",system-ui,-apple-system,Arial,sans-serif}' +
+    'header{padding:18px 16px 8px}.bar{height:7px;width:60%;max-width:420px;background:#4A6DA7;margin-bottom:12px}' +
+    'h1{font-size:24px;font-weight:600;margin:0}header p{margin:4px 0 0;color:#757575;font-size:14px}.tip{font-size:12.5px}' +
+    'main{padding:8px 8px 30px}img{display:block;width:100%;max-width:1400px;margin:0 auto 14px;border:1px solid #E2E2E2;border-radius:10px;background:#fff}' +
+    '</style></head><body>' + body + '</body></html>';
+  return HtmlService.createHtmlOutput(html)
+    .setTitle(doc ? doc.label.replace('View ', '') : 'Document')
+    .addMetaTag('viewport', 'width=device-width, initial-scale=1');
+}
+
+/** Assignment map image as a data URL (read from Google Drive). */
+function apiMap() {
+  const s = readSettings_();
+  const m = String(s.mapImageLink || '').match(/[-\w]{25,}/);
+  if (!m) return '';
+  const cache = CacheService.getScriptCache();
+  const hit = cache.get('map_' + m[0]);
+  if (hit) return hit;
+  const blob = DriveApp.getFileById(m[0]).getBlob();
+  const url = 'data:' + blob.getContentType() + ';base64,' + Utilities.base64Encode(blob.getBytes());
+  if (url.length < 95000) cache.put('map_' + m[0], url, 21600);
+  return url;
+}
+
+/* ========================= READING ========================= */
+
+function readSettings_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(SETTINGS_TAB);
+  if (!sh) throw new Error('Missing tab: ' + SETTINGS_TAB);
+  const vals = sh.getDataRange().getDisplayValues();
+  const s = {};
+  for (let i = 0; i < vals.length; i++) {
+    const label = String(vals[i][0]).trim();
+    if (norm_(label) === LEADER_HEADER) break;
+    if (label) s[camel_(label)] = String(vals[i][1]).trim();
+  }
+  return s;
+}
+
+/**
+ * Overseers and keymen. They come from the Role, Oversees and Department columns on the FIRST tab of the
+ * Master Contact Sheet. A contact sheet without a Role column falls back to the old Oversight & Keymen
+ * table on Web Settings. Overseer roles (Overseer, Asst. Overseer) with Oversees blank get ALL.
+ */
+let LEADERS_ = null;   // read once per request
+function readLeaders_() {
+  if (LEADERS_) return LEADERS_;
+  const s = readSettings_(), codes = readCodes_(s);
+  const table = leaderTable_(), old = {};
+  table.forEach(r => { old[norm_(r.name)] = r; });
+  const rows = contactRoles_(s) || table;
+  LEADERS_ = rows.map(r => {
+    const key = norm_(r.name), secText = r.secText, oldCode = (old[key] || {}).oldCode || '';
+    const all = secText.toUpperCase() === 'ALL' || (!secText && /overseer/i.test(r.role));
+    return {
+      name: r.name,
+      key: key,
+      role: r.role || 'Keyman',
+      all: all,
+      sections: all ? [] : splitList_(secText),
+      // the code on the Master Contact Sheet wins; the old Web Settings column is only a fallback
+      code: codes[key] || oldCode,
+      oldCode: oldCode,
+      department: r.department
+    };
+  });
+  return LEADERS_;
+}
+
+/** The old Oversight & Keymen table on Web Settings (empty if it's been removed). */
+function leaderTable_() {
+  const vals = SpreadsheetApp.getActive().getSheetByName(SETTINGS_TAB).getDataRange().getDisplayValues();
+  let start = -1;
+  for (let i = 0; i < vals.length; i++) if (norm_(vals[i][0]) === LEADER_HEADER) { start = i + 1; break; }
+  if (start < 0) return [];
+  const out = [];
+  for (let i = start; i < vals.length; i++) {
+    const name = toLastFirst_(String(vals[i][0]).trim());
+    if (!name) continue;
+    const typed = String(vals[i][3]).trim().toUpperCase();
+    out.push({
+      name: name,
+      role: String(vals[i][1]).trim(),
+      secText: String(vals[i][2]).trim(),
+      oldCode: /^[A-Z0-9]{4,}$/.test(typed) ? typed : '',   // skip placeholders like "[type in random access code]"
+      department: String(vals[i][4] || '').trim()
+    });
+  }
+  return out;
+}
+
+/** Leaders from the contact sheet's Role column, or null when that sheet has no Role column (older copies). */
+function contactRoles_(s) {
+  if (!s.contactSheetId) return null;
+  try {
+    const t = codeTab_(s), head = t.vals[0].map(norm_);
+    const iR = head.indexOf('role');
+    if (iR < 0 || t.iL < 0 || t.iF < 0) return null;
+    const iO = head.indexOf('oversees'), iD = head.findIndex(h => h.indexOf('department') === 0);
+    const get = (r, i) => (i >= 0 ? String(r[i] || '').trim() : '');
+    const out = [];
+    t.vals.slice(1).forEach(r => {
+      if (!codeRowKey_(t, r) || !get(r, iR)) return;
+      out.push({ name: get(r, t.iL) + ', ' + get(r, t.iF), role: get(r, iR), secText: get(r, iO), department: get(r, iD) });
+    });
+    return out;
+  } catch (err) {
+    console.error('Could not read roles from the contact sheet: ' + err);
+    return null;
+  }
+}
+
+/**
+ * Everyone on the Master Contact Sheet, keyed by normalized "last, first":
+ *   { name, phone, email, age, limits, onFirstTab }
+ * onFirstTab = true when the person is on the FIRST tab of the contact sheet.
+ * Only first-tab people can be picked when swapping or filling a spot.
+ */
+function readContacts_(s) {
+  const out = {};
+  if (!s.contactSheetId) return out;
+  try {
+    const ss = SpreadsheetApp.openById(s.contactSheetId);
+    const first = ss.getSheets()[0];
+    const sh = ss.getSheetByName(s.contactSheetTab || 'Master Contact Sheet') || first;
+    parseContactTab_(sh, out, sh.getSheetId() === first.getSheetId());
+    if (sh.getSheetId() !== first.getSheetId()) parseContactTab_(first, out, true);
+  } catch (err) {
+    console.error('Could not read contact sheet: ' + err);
+  }
+  return out;
+}
+
+function parseContactTab_(sh, out, isFirst) {
+  const vals = sh.getDataRange().getDisplayValues();
+  if (!vals.length) return;
+  const head = vals[0].map(norm_);
+  const iL = head.indexOf('last name'), iF = head.indexOf('first name');
+  let iP = head.indexOf('phone #'); if (iP < 0) iP = head.indexOf('phone');
+  const iE = head.indexOf('email'), iA = head.indexOf('age');
+  let iS = head.indexOf('scheduling limitations');
+  if (iS < 0) iS = head.findIndex(h => h.indexOf('limitation') >= 0);
+  if (iL < 0 || iF < 0) return;
+  const get = (row, i) => (i >= 0 ? String(row[i] || '').trim() : '');
+  for (let r = 1; r < vals.length; r++) {
+    const last = get(vals[r], iL), first = get(vals[r], iF);
+    if (!last || !first || last.indexOf(',') >= 0) continue;
+    if (norm_(last) === 'last name' || norm_(first) === 'first name') continue; // a repeated header row
+    const ph = get(vals[r], iP), em = get(vals[r], iE), age = get(vals[r], iA), lim = get(vals[r], iS);
+    const k = norm_(last + ', ' + first);
+    const c = out[k];
+    if (!c) out[k] = { name: last + ', ' + first, phone: ph, email: em, age: age, limits: lim, onFirstTab: isFirst };
+    else {
+      if (!c.phone && ph) c.phone = ph;
+      if (!c.email && em) c.email = em;
+      if (!c.age && age) c.age = age;
+      if (!c.limits && lim) c.limits = lim;
+      if (isFirst) c.onFirstTab = true;
+    }
+  }
+}
+
+/** Phone numbers keyed by normalized "last, first". */
+function readPhones_(s) {
+  const c = readContacts_(s), out = {};
+  Object.keys(c).forEach(k => { if (c[k].phone) out[k] = c[k].phone; });
+  return out;
+}
+
+/** People on the first tab of the contact sheet who have no assignment and aren’t overseers/keymen. */
+function unassigned_(s, sched, leaders, book) {
+  const contacts = book || readContacts_(s), assigned = {}, lead = {};
+  sched.assignments.forEach(a => { assigned[a.key] = 1; });
+  leaders.forEach(l => { lead[l.key] = 1; });
+  return Object.keys(contacts).filter(k => contacts[k].onFirstTab && !assigned[k] && !lead[k]).map(k => contacts[k]);
+}
+
+/**
+ * Turns the Schedule tab into:
+ *   slots:        the time columns, in order
+ *   rows:         every spot row with the names in each time column
+ *   assignments:  one entry per person per time slot
+ *   sectionNotes: sentences typed on their own row above a section (one note per line;
+ *                 a line starting with ! is a red alert, "7:45 AM: ..." belongs to that shift)
+ */
+function readSchedule_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
+  if (!sh) throw new Error('Missing tab: ' + SCHEDULE_TAB);
+  const vals = sh.getDataRange().getDisplayValues();
+  const head = vals[0].map(h => String(h).trim());
+  const findCol = labels => { for (let i = 0; i < head.length; i++) if (labels.indexOf(norm_(head[i])) >= 0) return i; return -1; };
+  const iPos = findCol(['position #', 'position', 'spot']);
+  const iSec = findCol(['section']);
+  const iNotes = findCol(['notes']);
+  const iOver = findCol(['time override']);
+  const iInstr = findCol(['shift instructions']);   // optional: shown to the volunteer as tap-to-open "Shift instructions"
+
+  const slots = [];
+  head.forEach((h, i) => {
+    if (i === iPos || i === iSec || i === iNotes || i === iOver || i === iInstr) return;
+    const m = parseTime_(h);
+    if (m !== null) slots.push({ col: i, start: m, label: fmtTime_(m) });
+  });
+  slots.forEach((sl, k) => { sl.id = k; sl.end = k < slots.length - 1 ? slots[k + 1].start : null; });
+
+  // A real name in a time cell (not blank, not "No shift needed", not a "<<--" arrow)
+  const realName = raw => { raw = String(raw).trim(); return raw !== '' && !isClosed_(raw) && raw.indexOf('<<') !== 0; };
+  const cellOf = (row, i) => (i >= 0 ? String(row[i]).trim() : '');
+  // Section names that belong to real spot rows (rows with a position # or someone scheduled)
+  const knownSecs = {};
+  for (let r = 1; r < vals.length; r++) {
+    const sec = cellOf(vals[r], iSec);
+    if (sec && (cellOf(vals[r], iPos) || slots.some(sl => realName(vals[r][sl.col])))) knownSecs[norm_(sec)] = 1;
+  }
+
+  const rows = [], pendingNotes = [], sectionNotes = {}, rawNoteRows = [];
+  for (let r = 1; r < vals.length; r++) {
+    const row = vals[r];
+    const pos = cellOf(row, iPos);
+    const sec = cellOf(row, iSec);
+    const hasNames = slots.some(sl => String(row[sl.col]).trim() !== '');
+    const hasReal = slots.some(sl => realName(row[sl.col]));
+    // Note row: no position # and nobody scheduled, and the text isn't one of our section names.
+    // (It can still have "No shift needed" typed across it — that doesn't make it a spot.)
+    if (!pos && (!hasNames || (!hasReal && !knownSecs[norm_(sec)]))) {
+      if (sec) rawNoteRows.push({ index: rows.length, text: sec });
+      continue;
+    }
+    // Fill each time column; "<<" text = previous person stays all day
+    const cells = [], closed = [];
+    let carry = null, allDay = false;
+    slots.forEach((sl, k) => {
+      const raw = String(row[sl.col]).trim();
+      if (isClosed_(raw)) { closed.push(k); cells.push([]); return; }   // "No shift needed"
+      if (raw.indexOf('<<') === 0) { allDay = true; cells.push(carry ? carry.slice() : []); return; }
+      if (allDay) { cells.push(carry ? carry.slice() : []); return; }
+      const names = splitNames_(raw);
+      if (names.length) carry = names;
+      cells.push(names);
+    });
+    rows.push({
+      id: r + 1,
+      pos: pos.replace(/^\*+/, '').trim(),
+      spot: spotLabel_(pos, sec),
+      section: sec || 'Other',
+      notes: iNotes >= 0 ? String(row[iNotes]).trim() : '',
+      override: iOver >= 0 ? String(row[iOver]).trim() : '',
+      instructions: iInstr >= 0 ? String(row[iInstr]).trim() : '',
+      allDay: allDay,
+      closed: closed,
+      cells: cells
+    });
+  }
+
+  // A sentence on its own row is a note for the section right below it
+  const sectionNames = uniq_(rows.map(x => x.section)).map(norm_);
+  rawNoteRows.forEach(n => {
+    if (sectionNames.indexOf(norm_(n.text)) >= 0) return; // empty spot row like "Greeter"
+    const next = rows[n.index];
+    if (!next) return;
+    // Each line is its own note:  "!..." = red alert,  "7:45 AM: ..." = note for the shift starting then
+    String(n.text).split(/\r?\n/).map(x => x.trim()).filter(Boolean).forEach(line => {
+      let note = { kind: 'note', text: line };
+      const tm = line.match(/^(\d{1,2}:\d{2}\s*[AaPp]\.?[Mm]?\.?)\s*[:\-–]\s*(.+)$/);
+      if (line.charAt(0) === '!') note = { kind: 'alert', text: line.replace(/^!+\s*/, '') };
+      else if (tm) note = { kind: 'time', time: parseTime_(tm[1]), timeLabel: fmtTime_(parseTime_(tm[1])), text: tm[2].trim() };
+      (sectionNotes[next.section] = sectionNotes[next.section] || []).push(note);
+    });
+  });
+
+  const assignments = [];
+  rows.forEach(rw => rw.cells.forEach((names, k) => names.forEach(n => {
+    assignments.push({ key: norm_(n), name: n, rowId: rw.id, slot: k, section: rw.section, spot: rw.spot, pos: rw.pos, notes: rw.notes, instructions: rw.instructions, override: rw.override, allDay: rw.allDay });
+  })));
+
+  return { slots: slots, rows: rows, assignments: assignments, sectionNotes: sectionNotes };
+}
+
+/** Group a person's slot-by-slot assignments into readable blocks with breaks. */
+function buildBlocks_(mine, sched, s) {
+  // the day's last shift ends when a keyman or overseer relieves them (Web Settings: Last Shift Ends)
+  const endText = s.lastShiftEnds || 'until relieved';
+  const byRow = {};
+  mine.forEach(a => (byRow[a.rowId] = byRow[a.rowId] || []).push(a));
+  const blocks = [];
+  Object.keys(byRow).forEach(rid => {
+    const list = byRow[rid].sort((a, b) => a.slot - b.slot);
+    let cur = null;
+    list.forEach(a => {
+      if (cur && a.slot === cur.lastSlot + 1) { cur.lastSlot = a.slot; return; }
+      cur = { first: a.slot, lastSlot: a.slot, a: a };
+      blocks.push(cur);
+    });
+  });
+  const out = blocks.map(b => {
+    const a = b.a, first = sched.slots[b.first], last = sched.slots[b.lastSlot];
+    let startMin = first.start, endMin = last.end, timeText;
+    if (a.override) {
+      const t = parseTime_(a.override);
+      if (t !== null) startMin = t;
+      timeText = a.override;
+    } else if (a.allDay) {
+      timeText = first.label + ' – ' + endText + ' (all day)';
+      endMin = null;
+    } else {
+      timeText = first.label + ' – ' + (last.end !== null ? fmtTime_(last.end) : endText);
+    }
+    const cells = [];
+    for (let k = b.first; k <= b.lastSlot; k++) cells.push([a.rowId, k]);
+    // the next time slot of this spot is reduced for low traffic: no relief is coming
+    const row = sched.rows.filter(r => r.id === a.rowId)[0];
+    const reducedAfter = !a.allDay && row && isReduced_(row, b.lastSlot + 1, sched);
+    return {
+      reducedAfter: !!reducedAfter,
+      startMin: startMin, endMin: endMin, timeText: timeText,
+      spot: a.spot, section: a.section, notes: a.notes, instructions: a.instructions || '', allDay: a.allDay, override: !!a.override,
+      cells: cells   // [row, slot] pairs, so leaders can tap a shift to swap/remove it
+    };
+  }).sort((x, y) => x.startMin - y.startMin);
+  // One person covering two spots at the same time (e.g. 6 & 7) shows as one card
+  const merged = [];
+  out.forEach(b => {
+    const twin = merged.filter(m => m.timeText === b.timeText && m.section === b.section)[0];
+    if (twin) { twin.spot += ' & ' + b.spot.replace(/^Spot /, ''); twin.cells = twin.cells.concat(b.cells); twin.reducedAfter = twin.reducedAfter || b.reducedAfter; return; }
+    merged.push(b);
+  });
+  return merged;
+}
+
+/** Every person seen in these rows, with all of their shifts for the day (for "By person"). */
+function peopleBlocks_(sched, s, rows) {
+  const keys = {};
+  rows.forEach(r => r.cells.forEach(c => c.forEach(n => { keys[norm_(n)] = n; })));
+  return Object.keys(keys).sort((a, b) => nameSort_(keys[a], keys[b])).map(k => ({
+    name: keys[k],
+    blocks: buildBlocks_(sched.assignments.filter(a => a.key === k), sched, s)
+  }));
+}
+
+/** Double-bookings, missing phone numbers, people off the contact sheet, misspelled keyman sections. */
+function findIssues_(sched, s, leaders, phones, contacts) {
+  const allowed = splitList_(s.allowedSameTimeSpots).map(x => x.replace(/^\*+/, '').trim());
+  const issues = [];
+  sched.slots.forEach((sl, k) => {
+    const seen = {};
+    sched.assignments.filter(a => a.slot === k).forEach(a => (seen[a.key] = seen[a.key] || []).push(a));
+    Object.keys(seen).forEach(key => {
+      const list = seen[key];
+      if (list.length < 2) return;
+      const rowsUsed = uniq_(list.map(a => String(a.rowId)));
+      if (rowsUsed.length < 2) return;
+      if (list.every(a => allowed.indexOf(a.pos) >= 0)) return;
+      const spots = uniq_(list.map(a => a.spot));
+      issues.push({ type: 'Double-booked', key: [key, sl.label].concat(spots.slice().sort()).join('|'),
+        text: list[0].name + ' is in ' + spots.join(' and ') + ' at ' + sl.label });
+    });
+  });
+  // Scheduled but not on the first tab of the contact sheet: their personal link won't open
+  const offSheet = {}, noPhone = {};
+  sched.assignments.forEach(a => {
+    const c = contacts[a.key];
+    if (!c || !c.onFirstTab) offSheet[a.key] = a.name;
+    else if (!phones[a.key]) noPhone[a.key] = a.name;
+  });
+  Object.keys(offSheet).forEach(k => issues.push({ type: 'Not on contact sheet', text: offSheet[k] +
+    ' has shifts but isn’t on the first tab of the Master Contact Sheet, so their personal link won’t open. Check the spelling, add them back, or take them off the schedule.' }));
+  Object.keys(noPhone).forEach(k => issues.push({ type: 'No phone found', text: noPhone[k] + ' is on the contact sheet but has no phone number listed' }));
+  // A section with no keyman is fine: its volunteers are simply pointed to the overseers.
+  // a keyman's Oversees section that isn't on the Schedule is usually a typo
+  const onSched = uniq_(sched.rows.map(r => norm_(r.section)));
+  leaders.forEach(l => l.sections.forEach(x => {
+    if (onSched.indexOf(norm_(x)) < 0) issues.push({ type: 'Unknown section', text: l.name + ' oversees "' + x + '", but no section on the Schedule tab has that name. Check the spelling in the Oversees column on the Master Contact Sheet' });
+  }));
+  return issues;
+}
+
+/* ===================== EDITING THE SCHEDULE ===================== */
+
+const LOG_TAB = 'Change Log';
+const IGNORE_TAB = 'Ignored Conflicts';
+const CANCEL_TAB = 'Cancellations';
+const CANCEL_HEADER = ['Name (Last, First)', 'Cancelled by', 'When', 'Sections'];
+
+/** People marked as a Cancellation/No-show: they can't be picked for spots until allowed again. */
+function readCancelled_() {
+  const out = {};
+  const sh = SpreadsheetApp.getActive().getSheetByName(CANCEL_TAB);
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues().forEach(r => { const n = String(r[0]).trim(); if (n) out[norm_(n)] = 1; });
+  return out;
+}
+
+/**
+ * People shown when swapping or filling a spot, with the slots they're already busy in.
+ * Everyone who appears on the page is listed (so tapping a name still shows their day),
+ * but only "pickable" people can be chosen: on the FIRST tab of the Master Contact Sheet
+ * and not an overseer. Keymen can be picked and are tagged.
+ */
+function roster_(sched, s, leaders, contacts, teamRows, extra) {
+  const people = {};
+  if (teamRows) {
+    teamRows.forEach(r => r.cells.forEach(c => c.forEach(n => { people[norm_(n)] = n; })));
+    (extra || []).forEach(n => { people[norm_(n)] = n; });
+  } else {
+    // overseers: everyone scheduled, everyone on the first contact-sheet tab, and all leaders
+    sched.assignments.forEach(a => { people[a.key] = a.name; });
+    Object.keys(contacts).forEach(k => { if (contacts[k].onFirstTab) people[k] = contacts[k].name; });
+    leaders.forEach(l => { people[l.key] = l.name; });
+  }
+  const overseer = {}, keyman = {}, cancelled = readCancelled_();
+  leaders.forEach(l => { if (l.all) overseer[l.key] = 1; else keyman[l.key] = 1; });
+  return Object.keys(people).sort((a, b) => nameSort_(people[a], people[b])).map(k => {
+    const mine = sched.assignments.filter(a => a.key === k);
+    const busy = {};
+    mine.forEach(a => { busy[a.slot] = (busy[a.slot] ? busy[a.slot] + ' + ' : '') + a.spot + ' · ' + a.section; });
+    const c = contacts[k] || {};
+    return { name: people[k], age: c.age || '', limits: c.limits || '', phone: c.phone || '', busy: busy, blocked: isBlocked_(mine, s),
+      pickable: !!c.onFirstTab && !overseer[k] && !cancelled[k], keyman: !!keyman[k] && !overseer[k], cancelled: !!cancelled[k] };
+  });
+}
+
+function sheet_(name, header) {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(name);
+  if (!sh) {
+    sh = ss.insertSheet(name);
+    sh.appendRow(header);
+    sh.getRange(1, 1, 1, header.length).setFontWeight('bold');
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+/**
+ * Change one cell on the Schedule tab.
+ * req = { rowId, slot, pos, section, expected: [names now in the cell], oldName, newName }
+ *   swap: oldName + newName · fill: newName only · remove: oldName only
+ */
+function apiEdit(code, req) {
+  if (req && req.unscheduled) return setUnscheduled_(code, req);
+  if (req && req.reduced) return setReduced_(code, req);
+  if (req && req.reopen) return reopenClosed_(code, req);
+  if (req && req.newLink) return newLink_(code, req.newLink);
+  if (req && (req.counts || req.tally || req.checkin)) {
+    const key = req.checkin ? 'useBadgeCheckIn' : 'useAttendanceCounts';
+    if (!featureOn_(readSettings_(), key)) return { ok: false, error: 'This feature is turned off.' };
+  }
+  if (req && req.counts) return setCounts_(code, req);
+  if (req && req.tally) {
+    const me = leaderByCode_(code);
+    if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+    return saveTally_({ name: me.name, overseer: me.all, leader: me }, req);
+  }
+  if (req && req.checkin) {
+    const me = leaderByCode_(code);
+    if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+    return checkinAction_(me, req);
+  }
+  const leaders = readLeaders_();
+  const c = String(code || '').trim().toUpperCase();
+  const me = c ? leaders.filter(l => l.code && l.code === c)[0] : null;
+  if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+  if (!me.all && linksInactive_(readSettings_())) return { ok: false, error: 'Schedule links for this event are no longer active.' };
+
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const s = readSettings_();
+    const sched = readSchedule_();
+    const row = sched.rows.filter(r => r.id === Number(req.rowId))[0];
+    const slot = sched.slots[Number(req.slot)];
+    if (!row || !slot || row.pos !== req.pos || row.section !== req.section)
+      return { ok: false, changed: true, error: 'The schedule was just changed by someone else. It will refresh so you can try again.' };
+    if (!me.all && me.sections.map(norm_).indexOf(norm_(row.section)) < 0)
+      return { ok: false, error: 'You can only change spots in your own sections.' };
+
+    const now = row.cells[req.slot] || [];
+    if (now.map(norm_).join('|') !== (req.expected || []).map(norm_).join('|'))
+      return { ok: false, changed: true, error: 'That spot was just changed by someone else. It will refresh so you can try again.' };
+
+    const oldName = req.oldName ? toLastFirst_(req.oldName) : '';
+    const newName = req.newName ? toLastFirst_(String(req.newName).trim()) : '';
+    if (newName) {
+      const nk = norm_(newName);
+      if (leaders.some(l => l.all && l.key === nk))
+        return { ok: false, error: 'Overseers can’t be scheduled into spots.' };
+      if (readCancelled_()[nk])
+        return { ok: false, error: firstLastName_(newName) + ' was marked as a cancellation/no-show. An overseer can tap their name and choose “Add back to roster.”' };
+      const ct = readContacts_(s)[nk];
+      if (!ct || !ct.onFirstTab)
+        return { ok: false, error: firstLastName_(newName) + ' isn’t on the first tab of the Master Contact Sheet, so they can’t be scheduled.' };
+    }
+    let names = now.slice();
+    if (oldName) names = names.filter(n => norm_(n) !== norm_(oldName));
+    if (newName) {
+      const at = now.map(norm_).indexOf(norm_(oldName));
+      if (oldName && at >= 0) names.splice(Math.min(at, names.length), 0, newName); else names.push(newName);
+    }
+
+    const sh = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
+    const also = [];
+    // the Schedule cells only accept names on the "Data Source" tab, so add a new name there first
+    if (newName) { addToDataSource_(newName); SpreadsheetApp.flush(); }
+    try {
+      // An all-day row ("<<--" arrow) is written out slot by slot first, so only this one slot changes
+      if (row.allDay) {
+        sched.slots.forEach((sl, k) => {
+          sh.getRange(row.id, sl.col + 1).setValue(row.closed.indexOf(k) >= 0 ? CLOSED_TEXT : (row.cells[k] || []).join(' + '));
+        });
+      }
+      sh.getRange(row.id, slot.col + 1).setValue(names.join(' + '));
+      // Fill only: also fill later times in this spot the leader ticked, if they're still empty (never overwrites anyone)
+      if (newName && !oldName) (req.alsoSlots || []).map(Number).forEach(k => {
+        const sl = sched.slots[k];
+        if (!sl || k <= Number(req.slot) || (row.cells[k] || []).length || row.closed.indexOf(k) >= 0) return;
+        sh.getRange(row.id, sl.col + 1).setValue(newName);
+        also.push({ k: k, label: row.override || sl.label });
+      });
+    } catch (err) {
+      if (/validation/i.test(String(err)))
+        return { ok: false, error: 'The Schedule sheet only accepts names from its dropdown list (the “Data Source” tab), and it wouldn’t take “' +
+          names.join(' + ') + '” in ' + row.spot + ' at ' + slot.label + '. Check that the name is on the Data Source tab, or ask an overseer.' };
+      throw err;
+    }
+
+    if (oldName && norm_(oldName) !== norm_(newName)) dropFromDataSource_(oldName, s);
+
+    const label = row.override || slot.label;
+    const action = oldName && newName ? 'Swap' : newName ? 'Fill' : 'Remove';
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), me.name, me.all ? me.role : 'Keyman',
+        row.section, row.spot, label, action, oldName, newName, req.warning || '', me.all ? 'n/a' : '']);
+    also.forEach(a => sheet_(LOG_TAB, ['When']).appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), me.name,
+      me.all ? me.role : 'Keyman', row.section, row.spot, a.label, 'Fill', '', newName, (req.alsoWarn || {})[a.k] || '', me.all ? 'n/a' : '']));
+    SpreadsheetApp.flush();
+    markShifts_(s);
+    return { ok: true, action: action, spot: row.spot, section: row.section, time: [label].concat(also.map(a => a.label)).join(', '),
+      oldName: oldName, newName: newName, alsoFilled: also.map(a => a.k) };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Overseers and keymen: mark someone as a no-show — clears every assignment they have today.
+ * Keymen can only do this for people scheduled in their own sections.
+ */
+function apiNoShow(code, name) {
+  const me = leaderByCode_(code);
+  if (!me) return { ok: false, error: 'Only overseers and keymen can mark a cancellation/no-show.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sched = readSchedule_();
+    const key = norm_(toLastFirst_(name));
+    const theirRows = sched.rows.filter(r => r.cells.some(c => c.map(norm_).indexOf(key) >= 0));
+    if (!me.all && !theirRows.some(r => inSections_(me, r.section)))
+      return { ok: false, error: firstLastName_(name) + ' isn’t scheduled in your sections, so only an overseer can mark them.' };
+    const sh = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
+    const removed = [];
+    theirRows.forEach(r => {
+      sched.slots.forEach((sl, k) => {
+        const cell = r.cells[k] || [];
+        const hit = cell.map(norm_).indexOf(key) >= 0;
+        if (hit) removed.push(r.spot + ' at ' + (r.override || sl.label));
+        // all-day rows are written out slot by slot so only this person is cleared
+        if (hit || (r.allDay && r.closed.indexOf(k) < 0)) sh.getRange(r.id, sl.col + 1).setValue(cell.filter(n => norm_(n) !== key).join(' + '));
+      });
+    });
+    const full = toLastFirst_(name);
+    dropFromDataSource_(full, readSettings_());
+    if (!readCancelled_()[key]) {
+      const csh = sheet_(CANCEL_TAB, CANCEL_HEADER);
+      if (!csh.getRange(1, 4).getDisplayValue()) csh.getRange(1, 4).setValue(CANCEL_HEADER[3]).setFontWeight('bold');
+      // the sections they were in, so those keymen can still see them and add them back
+      csh.appendRow([full, me.name, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), uniq_(theirRows.map(r => r.section)).join(', ')]);
+    }
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), me.name, me.role, 'All', removed.length + ' spot(s)',
+        removed.join('; '), 'No-show', toLastFirst_(name), '', '', me.all ? 'n/a' : '']);
+    SpreadsheetApp.flush();
+    markShifts_(readSettings_());   // after the Cancellations row, so the Shifts column says Cancelled
+    return { ok: true, removed: removed };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Everyone on the Cancellations tab, for the overseer page's undo list. */
+function readCancelledList_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(CANCEL_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 4).getDisplayValues()
+    .filter(r => String(r[0]).trim())
+    .map(r => ({ name: String(r[0]).trim(), by: String(r[1]).trim(), when: String(r[2]).trim(), sections: splitList_(r[3]) }));
+}
+
+/** Cancelled people a keyman may see and add back: they were cancelled from one of the keyman's sections. */
+function cancelledFor_(me) {
+  return readCancelledList_().filter(c => me.all || c.sections.some(sec => inSections_(me, sec)));
+}
+function inSections_(me, sec) { return me.all || me.sections.map(norm_).indexOf(norm_(sec)) >= 0; }
+
+/** Overseers and keymen: undo a cancellation ("Add back to roster") so the person can be scheduled again. */
+function apiAllowAgain(code, name) {
+  const me = leaderByCode_(code);
+  if (!me) return { ok: false, error: 'Only overseers and keymen can add someone back to the roster.' };
+  const key = norm_(toLastFirst_(name));
+  if (!me.all && !cancelledFor_(me).some(c => norm_(c.name) === key))
+    return { ok: false, error: firstLastName_(name) + ' wasn’t cancelled from your sections, so only an overseer can add them back.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sh = SpreadsheetApp.getActive().getSheetByName(CANCEL_TAB);
+    if (sh && sh.getLastRow() >= 2) {
+      const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getDisplayValues();
+      for (let i = vals.length - 1; i >= 0; i--) if (norm_(vals[i][0]) === key) sh.deleteRow(i + 2);
+    }
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), me.name, me.role, 'All', '', '',
+        'Added back to roster', '', toLastFirst_(name), '', me.all ? 'n/a' : '']);
+    SpreadsheetApp.flush();
+    markShifts_(readSettings_());   // clears "Cancelled" in the Shifts column
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+/** Optional features an event can switch off on Web Settings ("Use Attendance Counts", "Use Badge Check-In": No). Blank means on. */
+function featureOn_(s, key) { return !/^(no|off|false)$/i.test(String(s[key] || '').trim()); }
+function firstLastName_(n) { const p = String(n).split(','); return p.length > 1 ? p[1].trim() + ' ' + p[0].trim() : n; }
+
+/** Names on the Data Source tab (the Schedule dropdown list). */
+function dataSourceNames_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName('Data Source');
+  if (!sh) return [];
+  return sh.getDataRange().getDisplayValues().map(r => String(r[0]).trim())
+    .filter(n => n && n.indexOf(',') > 0 && n.indexOf('+') < 0);
+}
+
+/** Keep the Schedule dropdown list complete when someone new is added. */
+function addToDataSource_(name) {
+  const sh = SpreadsheetApp.getActive().getSheetByName('Data Source');
+  if (!sh) return;
+  const vals = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 1).getDisplayValues().map(r => norm_(r[0]));
+  if (vals.indexOf(norm_(name)) >= 0) return;
+  let r = vals.length + 1;
+  for (let i = 0; i < vals.length; i++) if (!vals[i]) { r = i + 1; break; }
+  sh.getRange(r, 1).setValue(name);
+}
+
+/* ==================== DATA SOURCE SYNC ==================== */
+// The Data Source tab follows the FIRST tab of the Master Contact Sheet, sorted A-Z.
+// Someone taken off the contact sheet stays on the list while their name is still on the Schedule,
+// so their cell doesn't turn invalid; they drop off once they're swapped out.
+// Runs by itself whenever the Master Contact Sheet or this sheet changes. The first time an overseer page opens,
+// it turns this on by itself (setupDataSourceSync does the same by hand from the Apps Script editor).
+// Changes saved from the web pages don't fire triggers, so those call dropFromDataSource_ themselves.
+
+/** Can be run from the Apps Script editor: watch both sheets and sync right away. */
+function setupDataSourceSync() {
+  const s = readSettings_();
+  if (!s.contactSheetId) throw new Error('Put the Master Contact Sheet ID on the Web Settings tab first.');
+  const r = installDataSourceSync_(s);
+  console.log('Data Source sync is on. ' + (r.ok ? 'Added ' + r.added.length + ', removed ' + r.removed.length + '.' : r.error));
+}
+
+function installDataSourceSync_(s) {
+  const p = PropertiesService.getScriptProperties(), here = SpreadsheetApp.getActive();
+  p.setProperty('SCHEDULE_ID', here.getId());
+  ScriptApp.getProjectTriggers().forEach(t => { if (t.getHandlerFunction() === 'syncDataSource') ScriptApp.deleteTrigger(t); });
+  ScriptApp.newTrigger('syncDataSource').forSpreadsheet(s.contactSheetId).onChange().create();
+  ScriptApp.newTrigger('syncDataSource').forSpreadsheet(here).onChange().create();
+  p.setProperty('SYNC_FOR', here.getId() + '|' + s.contactSheetId);
+  return syncDataSource();
+}
+
+/** Overseer pages turn the sync on (or re-aim it after the Contact Sheet ID changes), so nobody has to run setup by hand. */
+function ensureDataSourceSync_(s) {
+  if (!s.contactSheetId) return;
+  if (PropertiesService.getScriptProperties().getProperty('SYNC_FOR') === SpreadsheetApp.getActive().getId() + '|' + s.contactSheetId) return;
+  try { installDataSourceSync_(s); } catch (err) { console.error('Could not turn on the Data Source sync: ' + err); }
+}
+
+/** Make the Data Source tab match the Master Contact Sheet. Called by the trigger. */
+function syncDataSource() {
+  // a change on the contact sheet runs this in that sheet's context, so point back at the schedule
+  const id = PropertiesService.getScriptProperties().getProperty('SCHEDULE_ID');
+  if (id) SpreadsheetApp.setActiveSpreadsheet(SpreadsheetApp.openById(id));
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) return { ok: false, error: 'Busy; the next change will sync.' };
+  try {
+    const ss = SpreadsheetApp.getActive();
+    const sh = ss.getSheetByName('Data Source');
+    if (!sh) return { ok: false, error: 'No Data Source tab.' };
+    const s = readSettings_();
+    const book = readContacts_(s);
+    forgetCodes_();          // a code may have been typed or changed on the contact sheet
+    ensureCodes_(s, book);   // someone new on the contact sheet gets a code right away
+    ensureLinkCol_(s);       // the Personal Link column (uses the link saved by the last page load)
+    markShifts_(s);         // the Shifts column on the contact sheet follows the Schedule
+    const listed = Object.keys(book).filter(k => book[k].onFirstTab);
+    if (!listed.length) return { ok: false, error: 'Could not read the Master Contact Sheet, so nothing was changed.' };
+
+    const n = Math.max(sh.getLastRow(), 1);
+    const current = sh.getRange(1, 1, n, 1).getDisplayValues().map(r => String(r[0]).trim()).filter(Boolean);
+    const onSchedule = {};
+    ss.getSheetByName(SCHEDULE_TAB).getDataRange().getDisplayValues()
+      .forEach(row => row.forEach(v => { if (String(v).trim()) [v].concat(String(v).split('+')).forEach(p => { onSchedule[norm_(p)] = 1; }); }));
+
+    // keep the existing spelling when a name is already there, so Schedule cells stay valid
+    const have = {}, keep = {};
+    current.forEach(v => { have[norm_(v)] = v; if (onSchedule[norm_(v)]) keep[norm_(v)] = v; });
+    listed.forEach(k => { if (!keep[k]) keep[k] = have[k] || book[k].name; });
+
+    const list = Object.keys(keep).map(k => keep[k]).sort(nameSort_);
+    if (list.join('\n') === current.join('\n')) return { ok: true, added: [], removed: [] };
+    sh.getRange(1, 1, list.length, 1).setValues(list.map(v => [v]));
+    if (n > list.length) sh.getRange(list.length + 1, 1, n - list.length, 1).clearContent();
+    return {
+      ok: true,
+      added: list.filter(v => !have[norm_(v)]),
+      removed: current.filter(v => !keep[norm_(v)])
+    };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** After a page takes someone off the Schedule: drop them from Data Source too if they're off the contact sheet and have no shifts left. */
+function dropFromDataSource_(name, s) {
+  try {
+    const k = norm_(name);
+    const ss = SpreadsheetApp.getActive();
+    if (ss.getSheetByName(SCHEDULE_TAB).getDataRange().getDisplayValues()
+      .some(row => row.some(v => String(v).split('+').some(p => norm_(p) === k)))) return;
+    const book = readContacts_(s);
+    if (!Object.keys(book).length || (book[k] && book[k].onFirstTab)) return;
+    const sh = ss.getSheetByName('Data Source');
+    if (!sh) return;
+    const vals = sh.getRange(1, 1, Math.max(sh.getLastRow(), 1), 1).getDisplayValues();
+    for (let i = vals.length - 1; i >= 0; i--)
+      if (norm_(vals[i][0]) === k) sh.getRange(i + 1, 1).deleteCells(SpreadsheetApp.Dimension.ROWS);
+  } catch (err) {
+    console.error('Could not tidy Data Source: ' + err);   // never fail a save over this
+  }
+}
+
+/* ==================== ACCESS CODES ==================== */
+// Everyone's access code (volunteers, keymen, overseers) is in an "Access Code" column on the FIRST tab of the
+// Master Contact Sheet, and everyone's link is ...exec?code=THEIRCODE. Blank codes fill in by themselves whenever the
+// contact sheet changes or an overseer page opens; a keyman's old code from Web Settings is kept so his link still works.
+// Overseers can give someone a new code (Generate New Link), which turns the old link off.
+// "Inactivate Schedule Links: Yes" on Web Settings turns off every volunteer and keyman link; overseers still get in.
+
+const CODE_HEADER = 'Access Code';
+const CODE_CHARS = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';   // no 0/O or 1/I to mix up
+let CODES_ = null;   // read once per request
+
+function linksInactive_(s) { return /^(yes|true|on)$/i.test(String(s.inactivateScheduleLinks || '').trim()); }
+
+/** A new random code nobody has. Starts with a letter so Sheets never reads it as a number. */
+function newCode_(taken) {
+  let c;
+  do {
+    c = CODE_CHARS[Math.floor(Math.random() * 24)];
+    for (let i = 1; i < 8; i++) c += CODE_CHARS[Math.floor(Math.random() * CODE_CHARS.length)];
+  } while (taken[c]);
+  taken[c] = 1;
+  return c;
+}
+
+/** The contact sheet's first tab, with the columns codes need (iC is -1 until the Access Code column exists). */
+function codeTab_(s) {
+  const sh = SpreadsheetApp.openById(s.contactSheetId).getSheets()[0];
+  const vals = sh.getDataRange().getDisplayValues();
+  const head = (vals[0] || []).map(norm_);
+  return { sh: sh, vals: vals, iL: head.indexOf('last name'), iF: head.indexOf('first name'), iC: head.indexOf(norm_(CODE_HEADER)) };
+}
+/** Normalized "last, first" for a contact row, or '' for blank and repeated-header rows (same rules as the contact list). */
+function codeRowKey_(t, row) {
+  const last = String(row[t.iL] || '').trim(), first = String(row[t.iF] || '').trim();
+  if (!last || !first || last.indexOf(',') >= 0 || norm_(last) === 'last name') return '';
+  return norm_(last + ', ' + first);
+}
+
+/** Everyone's code, keyed by normalized "last, first". */
+function readCodes_(s) {
+  if (CODES_) return CODES_;
+  if (!s.contactSheetId) return (CODES_ = {});
+  const cache = CacheService.getScriptCache(), hit = cache.get('codes');
+  if (hit) return (CODES_ = JSON.parse(hit));
+  const out = {};
+  try {
+    const t = codeTab_(s);
+    if (t.iL >= 0 && t.iF >= 0 && t.iC >= 0) t.vals.slice(1).forEach(r => {
+      const k = codeRowKey_(t, r), c = String(r[t.iC] || '').trim().toUpperCase();
+      if (k && c && !out[k]) out[k] = c;
+    });
+  } catch (err) {
+    console.error('Could not read access codes: ' + err);
+    return (CODES_ = {});
+  }
+  cache.put('codes', JSON.stringify(out), 600);
+  return (CODES_ = out);
+}
+function forgetCodes_() { CODES_ = null; LEADERS_ = null; CacheService.getScriptCache().remove('codes'); }
+
+/** Whose code is this? Returns their "Last, First" from the contact sheet, or ''. */
+function codeOwner_(code, s) {
+  const c = String(code || '').trim().toUpperCase(), codes = readCodes_(s);
+  if (!c) return '';
+  const k = Object.keys(codes).filter(x => codes[x] === c)[0];
+  if (!k) return '';
+  const ct = readContacts_(s)[k];
+  return ct && ct.onFirstTab ? ct.name : '';
+}
+
+/** Give everyone on the contact sheet's first tab a code. book (optional) skips the work when nobody is missing one. */
+function ensureCodes_(s, book) {
+  if (!s.contactSheetId) return;
+  if (book) {
+    const codes = readCodes_(s);
+    if (!Object.keys(book).some(k => book[k].onFirstTab && !codes[k])) return;
+  }
+  try {
+    const t = codeTab_(s);
+    if (t.iL < 0 || t.iF < 0 || t.vals.length < 2) return;
+    let iC = t.iC;
+    if (iC < 0) {   // add the column after the last header
+      iC = t.vals[0].length;
+      while (iC > 0 && !String(t.vals[0][iC - 1]).trim()) iC--;
+      roomFor_(t.sh, iC);
+      t.sh.getRange(1, iC + 1).setValue(CODE_HEADER).setFontWeight('bold');
+    }
+    const old = {}, taken = {}, known = {};
+    readLeaders_().forEach(l => { if (l.oldCode) { old[l.key] = l.oldCode; taken[l.oldCode] = 1; } });
+    const rows = t.vals.slice(1).map(r => ({ k: codeRowKey_(t, r), c: iC < r.length ? String(r[iC] || '').trim().toUpperCase() : '' }));
+    rows.forEach(r => { if (r.c) taken[r.c] = 1; if (r.k && r.c && !known[r.k]) known[r.k] = r.c; });
+    let changed = false;
+    rows.forEach(r => {
+      if (!r.k || r.c) return;
+      r.c = known[r.k] || old[r.k] || newCode_(taken);
+      known[r.k] = r.c; changed = true;
+    });
+    if (!changed) return;
+    const col = t.sh.getRange(2, iC + 1, rows.length, 1);
+    col.setNumberFormat('@');
+    col.setValues(rows.map(r => [r.c]));
+    forgetCodes_();
+  } catch (err) {
+    console.error('Could not fill in access codes: ' + err);
+  }
+}
+
+/* ==================== PERSONAL LINK COLUMN (Master Contact Sheet) ==================== */
+// A "Personal Link" column right after Access Code shows each person's full link (...exec?code=THEIRCODE), so
+// overseers can copy anyone's link, including their own. It is ONE formula in the header cell, so the links follow the
+// Access Code column by themselves (Generate New Link, or a code typed by hand). The app writes the formula the first
+// time a page opens from the /exec link, and again only if that link ever changes.
+
+const LINK_HEADER = 'Personal Link';
+
+/**
+ * Run this once from the Apps Script editor after the app's permissions change (pick authorizeApp, click Run, approve).
+ * It only reads; it changes nothing. Do it BEFORE deploying so the live pages keep working.
+ */
+function authorizeApp() {
+  readSettings_();
+  ScriptApp.getProjectTriggers();
+  console.log('Approved. You can deploy now.');
+}
+
+/** Page loads save the real /exec link: background server calls and triggers can't always see it (they may get /dev). */
+function rememberExecUrl_(u) {
+  try {
+    if (!/\/exec$/.test(u)) return;
+    const p = PropertiesService.getScriptProperties();
+    if (p.getProperty('APP_URL') !== u) p.setProperty('APP_URL', u);
+  } catch (e) { /* never break the page over this */ }
+}
+
+/** The web app's /exec link, or '' if no page has been opened from it yet. */
+function execUrl_() {
+  try { return PropertiesService.getScriptProperties().getProperty('APP_URL') || ''; } catch (e) { return ''; }
+}
+
+/**
+ * Run this from the Apps Script editor (pick it in the function list, click Run) if the Personal Link column looks wrong.
+ * It redoes the column and the Execution log says what happened.
+ */
+function checkPersonalLinks() {
+  const s = readSettings_();
+  console.log('Contact sheet ID set: ' + !!s.contactSheetId);
+  console.log('Saved web app link: ' + (execUrl_() ? 'yes, ends in /exec' : 'NONE (open the /exec link once first)'));
+  PropertiesService.getScriptProperties().deleteProperty('LINKCOL_FOR');
+  console.log(ensureLinkCol_(s, true));
+}
+
+/** Make sure the Personal Link column exists and points at this web app. Cheap when nothing changed. Never throws unless loud. */
+function ensureLinkCol_(s, loud) {
+  if (!s || !s.contactSheetId) return 'No Contact Sheet ID.';
+  const url = execUrl_();
+  if (!url) return 'No saved /exec link yet.';
+  const props = PropertiesService.getScriptProperties(), want = 'v2|' + s.contactSheetId + '|' + url;   // bump v2 when the formula changes
+  if (props.getProperty('LINKCOL_FOR') === want) return 'Already up to date.';
+  try {
+    let t = codeTab_(s);
+    if (t.iC < 0) return 'No Access Code column yet.';   // codes come first
+    let iK = t.vals[0].map(norm_).indexOf(norm_(LINK_HEADER));
+    if (iK < 0) {   // add it right after Access Code
+      t.sh.insertColumnAfter(t.iC + 1);
+      t = codeTab_(s);
+      iK = t.iC + 1;
+      t.sh.getRange(1, t.iC + 1).copyFormatToRange(t.sh, iK + 1, iK + 1, 1, 1);
+    }
+    t.sh.setColumnWidth(iK + 1, 110);
+    t.sh.getRange(1, iK + 1, t.sh.getMaxRows(), 1).setWrapStrategy(SpreadsheetApp.WrapStrategy.CLIP);   // keep rows thin
+    const C = colLetter_(t.iC);
+    const head = t.sh.getRange(1, iK + 1);
+    if (t.sh.getMaxRows() > 1) t.sh.getRange(2, iK + 1, t.sh.getMaxRows() - 1, 1).clearContent();   // the formula fills these
+    head.setFormula('={"' + LINK_HEADER + '";ARRAYFORMULA(IF(' + C + '2:' + C + '="","",HYPERLINK("' + url + '?code="&' + C + '2:' + C + ',"' + LINK_HEADER + '")))}')
+      .setFontWeight('bold')
+      .setNote('Filled in by the app: each person\'s own link, made from their Access Code. Hover over it and click the copy icon to copy the full link. ' +
+        'It updates by itself when a code changes. Don\'t type in this column.');
+    props.setProperty('LINKCOL_FOR', want);
+    return 'Personal Link column updated (column ' + colLetter_(iK) + ').';
+  } catch (err) {
+    console.error('Could not set up the Personal Link column: ' + err);
+    if (loud) throw err;
+    return 'Error: ' + err;
+  }
+}
+
+/* ==================== SHIFTS COLUMN (Master Contact Sheet) ==================== */
+// A "Shifts" column (column A) on the contact sheet's FIRST tab lists the time slots each person has on the Schedule
+// ("All day" for a <<-- spot, "Cancelled" for a cancellation/no-show, blank = not used yet; blanks are highlighted).
+// The app adds the column itself and keeps it current; nobody types in it.
+
+const SHIFTS_HEADER = 'Shifts';
+const SECTIONS_HEADER = 'Sections Scheduled';   // next to Shifts: every section each person is scheduled in
+
+/** Make sure the sheet has a column at 0-based index i (a sheet can end right at its last used column). */
+function roomFor_(sh, i) { const have = sh.getMaxColumns(); if (i + 1 > have) sh.insertColumnsAfter(have, i + 1 - have); }
+
+/** 0-based column index → letter(s), e.g. 0 → A, 26 → AA. */
+function colLetter_(i) { let s = ''; for (i++; i > 0; i = Math.floor((i - 1) / 26)) s = String.fromCharCode(65 + (i - 1) % 26) + s; return s; }
+
+/** Each person's time slots on the Schedule, keyed by normalized "last, first": { slots: {k: 1}, extra: {label: minutes}, allDay }. */
+function shiftTimes_(sched) {
+  const out = {};
+  sched.rows.forEach(rw => {
+    const last = rw.cells.length - 1;
+    // a Time Override (like the baptism) replaces the slot time shown, same as on the page
+    const t = rw.override ? parseTime_(rw.override) : null;
+    rw.cells.forEach((names, k) => names.forEach(n => {
+      const key = norm_(n), o = out[key] = out[key] || { slots: {}, extra: {}, allDay: false, secs: [] };
+      if (o.secs.indexOf(rw.section) < 0) o.secs.push(rw.section);   // in Schedule order
+      if (rw.allDay && k === last) o.allDay = true;   // still there at the end of a <<-- row
+      if (rw.override) o.extra[rw.override] = t !== null ? t : sched.slots[k].start;
+      else o.slots[k] = 1;
+    }));
+  });
+  return out;
+}
+
+/** "7:45 AM – 10:40 AM, 12:00 PM until baptism ends, 1:40 PM": back-to-back slots become one range. */
+function shiftText_(o, sched, s) {
+  const items = [], ks = Object.keys(o.slots).map(Number).sort((a, b) => a - b);
+  for (let i = 0; i < ks.length; i++) {
+    let j = i;
+    while (j + 1 < ks.length && ks[j + 1] === ks[j] + 1) j++;
+    const first = sched.slots[ks[i]], last = sched.slots[ks[j]];
+    const end = last.end !== null ? fmtTime_(last.end) : (s.lastShiftEnds || 'until relieved');
+    items.push({ m: first.start, text: j > i ? first.label + ' – ' + end : first.label });
+    i = j;
+  }
+  Object.keys(o.extra).forEach(l => items.push({ m: o.extra[l], text: l }));
+  return items.sort((a, b) => a.m - b.m).map(x => x.text).join(', ');
+}
+
+/** Highlight a blank Shifts cell (col = its letter) for a listed person, but not for overseers/keymen (anyone with a Role). */
+function shiftsRuleFormula_(header, col) {
+  const h = header.map(norm_), F = colLetter_(h.indexOf('first name')), iR = h.indexOf('role');
+  return '=AND($' + F + '2<>"",' + col + '2=""' + (iR >= 0 ? ',$' + colLetter_(iR) + '2=""' : '') + ')';
+}
+
+/**
+ * ONE-TIME TIDY for an existing Master Contact Sheet (run from the Apps Script editor: pick tidyContactSheet, click Run).
+ * Removes the old Department column, puts Last Name / First Name right after Sections Scheduled (columns C and D),
+ * stops the red "not scheduled" highlight for overseers and keymen, and shades everyone with a Role light blue.
+ * Safe to run again; it only changes what still needs changing. The Execution log lists what it did.
+ */
+function tidyContactSheet() {
+  const s = readSettings_();
+  if (!s.contactSheetId) throw new Error('Web Settings has no Contact Sheet ID.');
+  const sh = SpreadsheetApp.openById(s.contactSheetId).getSheets()[0];
+  const head = () => sh.getRange(1, 1, 1, sh.getLastColumn()).getDisplayValues()[0].map(norm_);
+  let h = head();
+
+  const iD = h.findIndex(x => x.indexOf('department') === 0);
+  if (iD >= 0) { sh.deleteColumn(iD + 1); console.log('Removed the Department column.'); h = head(); }
+
+  const iX = h.indexOf(norm_(SECTIONS_HEADER)), want = iX >= 0 ? iX + 1 : 0;   // 0-based spot for Last Name
+  let iL = h.indexOf('last name'), iF = h.indexOf('first name');
+  if (iL < 0 || iF < 0) throw new Error('The first tab needs Last Name and First Name headers.');
+  if (iL !== want || iF !== want + 1) {
+    if (iF === iL + 1) sh.moveColumns(sh.getRange(1, iL + 1, 1, 2), want + 1);
+    else {
+      sh.moveColumns(sh.getRange(1, iL + 1), want + 1);
+      h = head(); iF = h.indexOf('first name');
+      sh.moveColumns(sh.getRange(1, iF + 1), want + 2);
+    }
+    console.log('Moved Last Name and First Name to columns ' + colLetter_(want) + ' and ' + colLetter_(want + 1) + '.');
+    h = head();
+  }
+
+  const iR = h.indexOf('role'), iS = h.indexOf(norm_(SHIFTS_HEADER));
+  const rows = sh.getMaxRows() - 1, last = sh.getLastColumn();
+  const formulaOf = r => { const c = r.getBooleanCondition(); return c ? String((c.getCriteriaValues() || [])[0] || '') : ''; };
+  const keep = sh.getConditionalFormatRules().filter(r => {
+    const f = formulaOf(r);
+    return !(/^=AND\(\$[A-Z]+2<>"",\$?[A-Z]+2=""/.test(f) || /^=\$[A-Z]+2<>""$/.test(f));   // old Shifts / Role rules: rebuilt below
+  });
+  const add = [];
+  if (iS >= 0) {
+    const width = h.indexOf(norm_(SECTIONS_HEADER)) === iS + 1 ? 2 : 1;
+    add.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied(shiftsRuleFormula_(h, colLetter_(iS)))
+      .setBackground('#FBE3E1').setRanges([sh.getRange(2, iS + 1, rows, width)]).build());
+  }
+  if (iR >= 0) add.push(SpreadsheetApp.newConditionalFormatRule().whenFormulaSatisfied('=$' + colLetter_(iR) + '2<>""')
+    .setBackground('#E8EFFB').setRanges([sh.getRange(2, 1, rows, last)]).build());
+  sh.setConditionalFormatRules(add.concat(keep));
+  console.log('Overseers and keymen are shaded light blue; only volunteers get the red "not scheduled" highlight.');
+}
+
+/** Fill in the Shifts and Sections Scheduled columns on the contact sheet (adding them as columns A and B the first time). Never throws. */
+function markShifts_(s) {
+  if (!s || !s.contactSheetId) return;
+  try {
+    const sched = readSchedule_(), shifts = shiftTimes_(sched), cancelled = readCancelled_();
+    let t = codeTab_(s);
+    if (t.iL < 0 || t.iF < 0 || t.vals.length < 2) return;
+    let iS = t.vals[0].map(norm_).indexOf(norm_(SHIFTS_HEADER));
+    if (iS < 0) {   // add it as a new column A
+      t.sh.insertColumnBefore(1);
+      t = codeTab_(s);
+      iS = 0;
+      t.sh.getRange(1, 2).copyFormatToRange(t.sh, 1, 1, 1, 1);
+      t.sh.getRange(1, 1).setValue(SHIFTS_HEADER).setFontWeight('bold')
+        .setNote('Filled in by the app: the time slots each person has on the Schedule (All day for an all-day spot). Blank (highlighted) = not scheduled yet. Don\'t type here.');
+      const body = t.sh.getRange(2, 1, t.sh.getMaxRows() - 1, 1);
+      body.setWrap(true).setVerticalAlignment('middle');
+      t.sh.setColumnWidth(1, 170);
+      const rules = t.sh.getConditionalFormatRules();
+      rules.push(SpreadsheetApp.newConditionalFormatRule()
+        .whenFormulaSatisfied(shiftsRuleFormula_(t.vals[0], 'A')).setBackground('#FBE3E1').setRanges([body]).build());
+      t.sh.setConditionalFormatRules(rules);
+    }
+    let iX = t.vals[0].map(norm_).indexOf(norm_(SECTIONS_HEADER));
+    if (iX < 0) {   // add it right after Shifts
+      t.sh.insertColumnAfter(iS + 1);
+      t = codeTab_(s);
+      iX = iS + 1;
+      t.sh.getRange(1, iS + 1).copyFormatToRange(t.sh, iX + 1, iX + 1, 1, 1);
+      t.sh.getRange(1, iX + 1).setValue(SECTIONS_HEADER).setFontWeight('bold')
+        .setNote('Filled in by the app: every section each person is scheduled in today. Don\'t type here.');
+      t.sh.getRange(2, iX + 1, t.sh.getMaxRows() - 1, 1).setWrap(true).setVerticalAlignment('middle');
+      t.sh.setColumnWidth(iX + 1, 200);
+    }
+    const shiftCol = [], secCol = [];
+    t.vals.slice(1).forEach(r => {
+      const k = codeRowKey_(t, r), o = k && shifts[k];
+      secCol.push([o ? o.secs.join(', ') : '']);
+      if (!k) shiftCol.push(['']);
+      else if (!o) shiftCol.push([cancelled[k] ? 'Cancelled' : '']);
+      else shiftCol.push([o.allDay ? 'All day' : shiftText_(o, sched, s)]);
+    });
+    const write = (col, i) => {
+      if (col.every((w, n) => w[0] === String(t.vals[n + 1][i] || '').trim())) return;
+      t.sh.getRange(2, i + 1, col.length, 1).setNumberFormat('@').setValues(col);
+    };
+    write(shiftCol, iS);
+    write(secCol, iX);
+  } catch (err) {
+    console.error('Could not fill in the Shifts column: ' + err);   // never fail a save over this
+  }
+}
+
+/** Overseers: give someone a new code. Their old link stops working right away. */
+function newLink_(code, name) {
+  const me = overseer_(code);
+  if (!me) return { ok: false, error: 'Only overseers can make a new link.' };
+  const s = readSettings_();
+  const k = norm_(toLastFirst_(name));
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    ensureCodes_(s);
+    const t = codeTab_(s);
+    if (t.iC < 0) return { ok: false, error: 'The Master Contact Sheet has no Access Code column yet.' };
+    const taken = {};
+    t.vals.slice(1).forEach(r => { const c = String(r[t.iC] || '').trim().toUpperCase(); if (c) taken[c] = 1; });
+    readLeaders_().forEach(l => { if (l.oldCode) taken[l.oldCode] = 1; });
+    const c = newCode_(taken);
+    let n = 0;
+    t.vals.forEach((r, i) => { if (i && codeRowKey_(t, r) === k) { t.sh.getRange(i + 1, t.iC + 1).setNumberFormat('@').setValue(c); n++; } });
+    if (!n) return { ok: false, error: firstLastName_(name) + ' isn’t on the first tab of the Master Contact Sheet.' };
+    forgetCodes_();
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a'), me.name, me.role, '', '', '', 'New link', toLastFirst_(name), '', '', 'n/a']);
+    return { ok: true, code: c, self: k === me.key };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Overseers: ignore (or un-ignore) a double-booking. */
+function apiIgnore(code, key, text, undo) {
+  const me = overseer_(code);
+  if (!me) return { ok: false };
+  const sh = sheet_(IGNORE_TAB, ['Conflict key', 'Conflict', 'Ignored by', 'When']);
+  const vals = sh.getDataRange().getDisplayValues();
+  for (let i = vals.length - 1; i >= 1; i--) if (vals[i][0] === key) sh.deleteRow(i + 1);
+  if (!undo) sh.appendRow([key, text, me.name, Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a')]);
+  return { ok: true };
+}
+
+/* ==================== CHECK IN / CHECK OUT ==================== */
+// Badges: people check in (take a badge) in the morning and check out (return it) at the end of the day.
+// Overseers pick the badge checkers; the page splits last names between them. Overseers, keymen and
+// badge checkers can check in anyone. Saved on the "Check In" tab.
+
+const CHECK_TAB = 'Check In';
+const CHECK_HEADER = ['Name', 'Checked in', 'In by', 'Checked out', 'Out by', 'Serve next assembly?'];
+const COMMITTED_TAB = 'Brothers committed for next time';   // on the Master Contact Sheet
+
+function readCheckers_() {
+  try { return JSON.parse(PropertiesService.getScriptProperties().getProperty('checkers') || '[]'); } catch (e) { return []; }
+}
+
+/** name key -> { in, inBy, out, outBy } */
+function readCheckins_() {
+  const out = {};
+  const sh = SpreadsheetApp.getActive().getSheetByName(CHECK_TAB);
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 6).getDisplayValues().forEach(r => {
+    if (String(r[0]).trim()) out[norm_(r[0])] = { in: r[1], inBy: r[2], out: r[3], outBy: r[4], next: r[5] };
+  });
+  return out;
+}
+
+/** Everyone who should get a badge: scheduled people, unassigned backups, keymen and overseers. Not greeters or cancelled. */
+function checkinPeople_(s, sched, leaders, contacts) {
+  const people = {}, cancelled = readCancelled_();
+  const byKey = {};
+  sched.assignments.forEach(a => (byKey[a.key] = byKey[a.key] || []).push(a));
+  Object.keys(byKey).forEach(k => { if (!isBlocked_(byKey[k], s)) people[k] = byKey[k][0].name; });
+  unassigned_(s, sched, leaders, contacts).forEach(c => { people[norm_(c.name)] = c.name; });
+  // keymen/overseers only if they're a real person on the contact sheet (not a placeholder like "Contact Overseers Below")
+  leaders.forEach(l => { if (contacts[l.key] || byKey[l.key]) people[l.key] = l.name; });
+  return Object.keys(people).filter(k => !cancelled[k]).sort((a, b) => nameSort_(people[a], people[b])).map(k => {
+    const mine = byKey[k] || [];
+    return {
+      name: people[k],
+      ph: (contacts[k] && contacts[k].phone) || '',   // for the reminder Text buttons
+      sec: uniq_(mine.map(a => a.section)),
+      // shifts as [start minute, end minute or null, spot] for "who's missing and when are they needed"
+      b: mine.length ? buildBlocks_(mine, sched, s).map(x => [x.startMin, x.endMin, x.spot]) : []
+    };
+  });
+}
+
+function checkinData_(s, sched, leaders, contacts) {
+  return { people: checkinPeople_(s, sched, leaders, contacts), status: readCheckins_(), checkers: readCheckers_() };
+}
+
+/**
+ * One check-in change. who = a leader, or { name, checker: true } for a badge checker's volunteer page.
+ * req.op: in, out, undoIn, undoOut, poll (just read), setCheckers (overseers), clearAll (overseers)
+ */
+function checkinAction_(who, req) {
+  const checkers = readCheckers_();
+  if (who.checker && !checkers.some(n => norm_(n) === norm_(who.name)))
+    return { ok: false, error: 'You’re not assigned to check people in. Please ask an overseer.' };
+  if (req.op === 'poll') return { ok: true, status: readCheckins_(), checkers: checkers };
+  if ((req.op === 'setCheckers' || req.op === 'clearAll') && !who.all)
+    return { ok: false, error: 'Only overseers can change this.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Busy saving other check-ins. Please try again.' };
+  try {
+    if (req.op === 'setCheckers') {
+      const list = uniq_((req.checkers || []).map(n => toLastFirst_(String(n).trim())).filter(Boolean));
+      PropertiesService.getScriptProperties().setProperty('checkers', JSON.stringify(list));
+      return { ok: true, status: readCheckins_(), checkers: list };
+    }
+    const sh = sheet_(CHECK_TAB, CHECK_HEADER);
+    if (req.op === 'clearAll') {
+      if (sh.getLastRow() > 1) sh.deleteRows(2, sh.getLastRow() - 1);
+      return { ok: true, status: {}, checkers: checkers };
+    }
+    const name = toLastFirst_(String(req.name || '').trim());
+    if (!name) return { ok: false, error: 'No name was chosen.' };
+    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'h:mm a');
+    if (!sh.getRange(1, 6).getDisplayValue()) sh.getRange(1, 6).setValue(CHECK_HEADER[5]).setFontWeight('bold');
+    const vals = sh.getRange(1, 1, sh.getLastRow(), 6).getDisplayValues();
+    let row = -1;
+    for (let i = 1; i < vals.length; i++) if (norm_(vals[i][0]) === norm_(name)) { row = i + 1; break; }
+    const cur = row > 0 ? vals[row - 1].slice(0, 6) : [name, '', '', '', '', ''];
+    const wasYes = cur[5] === 'Yes';
+    if (req.op === 'in') { if (!cur[1]) { cur[1] = stamp; cur[2] = who.name; } }
+    else if (req.op === 'out') {
+      if (!cur[1]) { cur[1] = stamp; cur[2] = who.name; }
+      if (!cur[3]) { cur[3] = stamp; cur[4] = who.name; }
+      if (['Yes', 'No', 'Unsure'].indexOf(req.next) >= 0) cur[5] = req.next;
+    }
+    else if (req.op === 'undoIn') { cur[1] = cur[2] = cur[3] = cur[4] = cur[5] = ''; }
+    else if (req.op === 'undoOut') { cur[3] = cur[4] = cur[5] = ''; }
+    else return { ok: false, error: 'Unknown action.' };
+    // times are saved as plain text so Sheets doesn't reformat them
+    const rowVals = cur.map((v, i) => (i === 1 || i === 3) && v ? "'" + v : v);
+    if (row > 0) sh.getRange(row, 1, 1, 6).setValues([rowVals]); else sh.appendRow(rowVals);
+    SpreadsheetApp.flush();
+    // "Willing to serve next assembly?" Yes adds them to a tab on the Master Contact Sheet; undoing takes them off
+    if (cur[5] === 'Yes' && !wasYes) setCommitted_(name, true);
+    else if (wasYes && cur[5] !== 'Yes') setCommitted_(name, false);
+    return { ok: true, status: readCheckins_(), checkers: checkers };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Add (or remove) someone on the "Brothers committed for next time" tab, copying their row from the main contact tab. */
+function setCommitted_(name, add) {
+  try {
+    const s = readSettings_();
+    if (!s.contactSheetId) return;
+    const ss = SpreadsheetApp.openById(s.contactSheetId);
+    const main = ss.getSheetByName(s.contactSheetTab || 'Master Contact Sheet') || ss.getSheets()[0];
+    const mv = main.getDataRange().getValues();
+    const head = mv[0].map(h => norm_(h));
+    const iL = head.indexOf('last name'), iF = head.indexOf('first name');
+    if (iL < 0 || iF < 0) return;
+    const key = norm_(name);
+    const isHim = r => norm_(String(r[iL]).trim() + ', ' + String(r[iF]).trim()) === key;
+    let tab = ss.getSheetByName(COMMITTED_TAB);
+    if (!tab) {
+      if (!add) return;
+      tab = ss.insertSheet(COMMITTED_TAB, ss.getSheets().length);   // at the end, so the main tab stays first
+      tab.getRange(1, 1, 1, mv[0].length).setValues([mv[0]]).setFontWeight('bold');
+      tab.setFrozenRows(1);
+    }
+    const tv = tab.getDataRange().getValues();
+    const there = [];
+    for (let i = 1; i < tv.length; i++) if (isHim(tv[i])) there.push(i + 1);
+    if (add) {
+      if (there.length) return;
+      let row = mv.slice(1).filter(isHim)[0];
+      if (!row) { row = mv[0].map(() => ''); const p = String(name).split(','); row[iL] = p[0].trim(); row[iF] = (p[1] || '').trim(); }
+      tab.appendRow(row);
+    } else {
+      there.reverse().forEach(r => tab.deleteRow(r));
+    }
+  } catch (err) {
+    console.error('Could not update ' + COMMITTED_TAB + ': ' + err);
+  }
+}
+
+/* ==================== ATTENDANCE COUNTS ==================== */
+// Overseers set the morning/afternoon count times on the day; until a time is set, nobody sees it.
+// Who sees a time: volunteers scheduled in a counting spot at that time, and keymen who don't
+// only oversee the sections below (unless they are in a counting spot themselves at that time).
+// Web Settings rows set these: "Attendance Count Spots" (e.g. 1-14) and "Attendance Count Hidden Keyman Sections". Blank = none.
+const COUNTS = [{ key: 'am', label: 'Morning Attendance Count' }, { key: 'pm', label: 'Afternoon Attendance Count' }];
+
+function readCounts_() {
+  const p = PropertiesService.getScriptProperties();
+  return COUNTS.map(c => { const v = p.getProperty('count|' + c.key); return { key: c.key, label: c.label, min: v === null || v === '' ? null : Number(v) }; });
+}
+
+/** Spot numbers that do the count, e.g. "1-14" or "1-14, 20". Only plain numbers match, so 2B never does. */
+function countSpots_(s) {
+  const out = {};
+  splitList_(s.attendanceCountSpots).forEach(part => {
+    const m = part.match(/^(\d+)\s*-\s*(\d+)$/);
+    if (m) for (let n = Number(m[1]); n <= Number(m[2]); n++) out[n] = 1;
+    else if (/^\d+$/.test(part)) out[Number(part)] = 1;
+  });
+  return out;
+}
+
+/** The time slot that is on duty at minute t, or -1. */
+function slotAt_(sched, t) {
+  let k = -1;
+  sched.slots.forEach((sl, i) => { if (sl.start <= t) k = i; });
+  if (k >= 0 && sched.slots[k].end != null && t >= sched.slots[k].end) return -1;
+  return k;
+}
+
+/** Count times one person should see. leader = their keyman record (null for volunteers). */
+function countsFor_(s, sched, key, leader) {
+  const spots = countSpots_(s);
+  const myArea = leader ? countAreaOf_(s, leader) : null;
+  const keymanSees = !!myArea;
+  const tallies = readTallies_();
+  return readCounts_().filter(c => {
+    if (c.min == null) return false;
+    if (keymanSees) return true;
+    return countingSpotsOf_(sched, spots, key, c.min).length > 0;
+  }).map(c => ({ key: c.key, label: c.label, time: fmtTime_(c.min),
+    // the spots this person counts at that time, with what's been submitted so far
+    // (keymen who see the count also count their own area, e.g. "Stage")
+    spots: countingSpotsOf_(sched, spots, key, c.min).concat(myArea ? [myArea] : [])
+      .map(sp => ({ spot: sp, n: (tallies[c.key][norm_(sp)] || {}).n })) }));
+}
+
+/**
+ * The area a keyman counts: their Department (e.g. "Lobby, Corridors & Dining"), or their sections if that's blank.
+ * Only keymen who see the count times count an area (not overseers, not the hidden keyman sections).
+ */
+function countAreaOf_(s, leader) {
+  const hidden = splitList_(s.attendanceCountHiddenKeymanSections).map(norm_);
+  if (leader.all || !leader.sections.some(sec => hidden.indexOf(norm_(sec)) < 0)) return null;
+  return leader.department || leader.sections.join(', ');
+}
+
+/** Counting spots (e.g. "Spot 3") this person is on duty at when the count is taken. */
+function countingSpotsOf_(sched, spots, key, min) {
+  const k = slotAt_(sched, min);
+  if (k < 0) return [];
+  return uniq_(sched.assignments.filter(a => a.key === key && a.slot === k && /^\d+$/.test(a.pos) && spots[Number(a.pos)]).map(a => a.spot));
+}
+
+/* Submitted numbers live on the "Attendance Counts" tab, one row per count and spot. */
+const TALLY_TAB = 'Attendance Counts';
+const TALLY_HEADER = ['Count', 'Spot', 'Number', 'Entered by', 'When'];
+const COUNT_NAME = { am: 'Morning', pm: 'Afternoon' };
+
+/** { am: { "spot 3": { n, by, when, row } }, pm: {...} } */
+function readTallies_() {
+  const out = { am: {}, pm: {} };
+  const sh = SpreadsheetApp.getActive().getSheetByName(TALLY_TAB);
+  if (!sh || sh.getLastRow() < 2) return out;
+  sh.getRange(2, 1, sh.getLastRow() - 1, 5).getDisplayValues().forEach((v, i) => {
+    const ck = v[0] === COUNT_NAME.am ? 'am' : v[0] === COUNT_NAME.pm ? 'pm' : null;
+    if (ck && v[1] && v[2] !== '') out[ck][norm_(v[1])] = { n: Number(String(v[2]).replace(/,/g, '')), by: v[3], when: v[4], row: i + 2 };
+  });
+  return out;
+}
+
+/** Overseers: count times plus every counting spot's number and the total. */
+function countTotals_(s, sched) {
+  const spots = countSpots_(s), tallies = readTallies_(), phones = readPhones_(s), leaders = readLeaders_();
+  const countRows = sched.rows.filter(r => /^\d+$/.test(r.pos) && spots[Number(r.pos)]);
+  // who is responsible for a count, so overseers can text them a reminder
+  const person = n => ({ name: n, phone: phones[norm_(n)] || '' });
+  return readCounts_().map(c => {
+    // every counting spot, then each keyman's area (expected even when that keyman spot is a placeholder)
+    const areas = uniq_(leaders.map(l => countAreaOf_(s, l)).filter(Boolean));
+    const k = c.min == null ? -1 : slotAt_(sched, c.min);
+    const list = uniq_(countRows.map(r => r.spot)).map(sp => ({ spot: sp })).concat(areas.map(a => ({ spot: a, area: true }))).map(x => {
+      const t = tallies[c.key][norm_(x.spot)] || {};
+      const who = x.area ? leaders.filter(l => countAreaOf_(s, l) === x.spot).map(l => l.name)
+        : k < 0 ? [] : uniq_(sched.assignments.filter(a => a.slot === k && a.spot === x.spot).map(a => a.name));
+      return { spot: x.spot, area: !!x.area, n: t.n, by: t.by || '', when: t.when || '', who: who.map(person) };
+    });
+    const done = list.filter(x => x.n != null);
+    return Object.assign(c, { time: c.min == null ? '' : fmtTime_(c.min), tally: list,
+      total: done.reduce((a, x) => a + x.n, 0), reported: done.length });
+  });
+}
+
+/**
+ * Save one spot's attendance number. req = { count: 'am'|'pm', spot: 'Spot 3', n: '245' (or '' to clear) }
+ * who = { name } for a counter (must be on duty at that spot at the count time), or { name, overseer: true }.
+ */
+function saveTally_(who, req) {
+  const ck = req.count === 'am' || req.count === 'pm' ? req.count : null;
+  if (!ck) return { ok: false, error: 'Something went wrong. Please refresh and try again.' };
+  const text = String(req.n == null ? '' : req.n).replace(/[,\s]/g, '');
+  if (text !== '' && !/^\d{1,5}$/.test(text)) return { ok: false, error: 'Please type the count as a whole number, like 245.' };
+  const s = readSettings_(), sched = readSchedule_();
+  const c = readCounts_().filter(x => x.key === ck)[0];
+  let spot = String(req.spot || '').trim();
+  const myArea = who.leader && !who.overseer ? countAreaOf_(s, who.leader) : null;
+  if (who.overseer) {
+    const spots = countSpots_(s);
+    spot = (sched.rows.filter(r => /^\d+$/.test(r.pos) && spots[Number(r.pos)] && norm_(r.spot) === norm_(spot))[0] || {}).spot ||
+      readLeaders_().map(l => countAreaOf_(s, l)).filter(a => a && norm_(a) === norm_(spot))[0];
+    if (!spot) return { ok: false, error: 'That spot isn’t one of the counting spots.' };
+  } else if (myArea && norm_(myArea) === norm_(spot)) {
+    if (!c || c.min == null) return { ok: false, error: 'The ' + COUNT_NAME[ck].toLowerCase() + ' count time hasn’t been set yet.' };
+    spot = myArea;
+  } else {
+    if (!c || c.min == null) return { ok: false, error: 'The ' + COUNT_NAME[ck].toLowerCase() + ' count time hasn’t been set yet.' };
+    spot = countingSpotsOf_(sched, countSpots_(s), norm_(who.name), c.min).filter(sp => norm_(sp) === norm_(spot))[0];
+    if (!spot) return { ok: false, error: 'You’re not on the schedule to count that spot at the ' + COUNT_NAME[ck].toLowerCase() + ' count. Please ask your keyman.' };
+  }
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sh = sheet_(TALLY_TAB, TALLY_HEADER);
+    const old = readTallies_()[ck][norm_(spot)];
+    const when = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a');
+    if (text === '') { if (old) sh.deleteRow(old.row); }
+    else if (old) sh.getRange(old.row, 3, 1, 3).setValues([[Number(text), who.name, when]]);
+    else sh.appendRow([COUNT_NAME[ck], spot, Number(text), who.name, when]);
+    SpreadsheetApp.flush();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Overseers: set or clear the count times. req.am / req.pm are "10:15 AM" text, or blank to clear. */
+function setCounts_(code, req) {
+  const me = overseer_(code);
+  if (!me) return { ok: false, error: 'Only overseers can set the attendance count times.' };
+  const p = PropertiesService.getScriptProperties();
+  for (const c of COUNTS) {
+    if (req[c.key] === undefined) continue;
+    const text = String(req[c.key] || '').trim();
+    const t = text ? parseTime_(text) : null;
+    if (text && t === null) return { ok: false, error: 'That time didn’t look right. Please try again.' };
+    if (t === null) p.deleteProperty('count|' + c.key); else p.setProperty('count|' + c.key, String(t));
+  }
+  return { ok: true };
+}
+
+/* ============ OPEN SPOTS LEFT UNSCHEDULED ON PURPOSE ============ */
+
+const UNSCHED_TAB = 'Unscheduled Spots';
+const UNSCHED_HEADER = ['Section', 'Spot', 'Time', 'Note', 'By', 'When'];
+
+/** Spots marked "leave unscheduled". Time is a slot label (e.g. 9:40 AM) or "All day". */
+function readUnscheduled_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(UNSCHED_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getDisplayValues().filter(r => String(r[0]).trim() && String(r[1]).trim())
+    .map(r => ({ section: r[0].trim(), pos: r[1].trim(), time: r[2].trim() || 'All day', note: r[3].trim(), by: r[4].trim(), when: r[5].trim() }));
+}
+
+// Overseers (any spot) and keymen (their sections): leave an open spot unscheduled with a note,
+// so it stops showing as open. Reached through apiEdit (req.unscheduled), which the page already uses.
+// req has section, pos, time (All day or a slot label), note, undo.
+function setUnscheduled_(code, req) {
+  const me = leaderByCode_(code);
+  if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+  const section = String(req.section || '').trim(), pos = String(req.pos || '').trim();
+  const times = (req.times || [req.time || 'All day']).map(t => String(t).trim()).filter(Boolean);
+  if (!inSections_(me, section)) return { ok: false, error: 'You can only change spots in your own sections.' };
+  const note = String(req.note || '').trim().slice(0, 200);
+  if (!req.undo && !note) return { ok: false, error: 'Please type a reason.' };
+  if (!times.length) return { ok: false, error: 'Please tick at least one time.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sched = readSchedule_();
+    const row = sched.rows.filter(r => r.section === section && r.pos === pos)[0];
+    if (!row) return { ok: false, changed: true, error: 'That spot was just changed on the schedule. It will refresh so you can try again.' };
+    if (times.some(t => t !== 'All day' && !sched.slots.some(sl => sl.label === t))) return { ok: false, changed: true, error: 'That time slot no longer exists. It will refresh.' };
+    const sh = sheet_(UNSCHED_TAB, UNSCHED_HEADER);
+    const vals = sh.getDataRange().getDisplayValues();
+    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a');
+    const keep = [];
+    for (let i = vals.length - 1; i >= 1; i--) {
+      if (norm_(vals[i][0]) !== norm_(section) || norm_(vals[i][1]) !== norm_(pos)) continue;
+      if (times.indexOf(vals[i][2]) >= 0) sh.deleteRow(i + 1);
+      else if (vals[i][2] === 'All day') {
+        // an older "All day" entry: split it into its single times, so only the times picked here change
+        sh.deleteRow(i + 1);
+        sched.slots.forEach((sl, k) => {
+          if (times.indexOf(sl.label) < 0 && !(row.cells[k] || []).length && row.closed.indexOf(k) < 0) keep.push([section, pos, sl.label, vals[i][3], vals[i][4], vals[i][5]]);
+        });
+      }
+    }
+    keep.forEach(r => sh.appendRow(r));
+    if (!req.undo) times.forEach(t => sh.appendRow([section, pos, t, note, me.name, stamp]));
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([stamp, me.name, me.role, section, row.spot, times.join(', '), req.undo ? 'Open again' : 'Left unscheduled', '', req.undo ? '' : note, '', me.all ? 'n/a' : '']);
+    SpreadsheetApp.flush();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/**
+ * Open a spot that has "No shift needed" typed on the Schedule sheet: erase that text so it shows + Fill.
+ * req = { rowId, section, pos, time } (rowId because Greeter and Exteriors rows have no spot number).
+ */
+function reopenClosed_(code, req) {
+  const me = leaderByCode_(code);
+  if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+  if (!inSections_(me, req.section)) return { ok: false, error: 'You can only change spots in your own sections.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sched = readSchedule_();
+    const row = sched.rows.filter(r => r.id === Number(req.rowId))[0];
+    const k = sched.slots.findIndex(sl => sl.label === String(req.time || ''));
+    if (!row || row.section !== req.section || row.pos !== req.pos || k < 0)
+      return { ok: false, changed: true, error: 'That spot was just changed on the schedule. It will refresh so you can try again.' };
+    if (row.closed.indexOf(k) < 0) return { ok: true };   // already open
+    const sh = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
+    sh.getRange(row.id, sched.slots[k].col + 1).setValue('');
+    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a');
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([stamp, me.name, me.role, row.section, row.spot, sched.slots[k].label, 'Open again', CLOSED_TEXT, '', '', me.all ? 'n/a' : '']);
+    SpreadsheetApp.flush();
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/* ============ SPOTS REDUCED FOR LOW TRAFFIC ============ */
+
+const REDUCED_TAB = 'Reduced Spots';
+const REDUCED_HEADER = ['Section', 'Spot', 'Time', 'By', 'When'];
+let REDUCED_ = null;   // read once per request
+
+/** Spot times cut back on purpose when traffic dies down. Time is a slot label (e.g. 10:40 AM). */
+function readReduced_() {
+  if (REDUCED_) return REDUCED_;
+  const sh = SpreadsheetApp.getActive().getSheetByName(REDUCED_TAB);
+  REDUCED_ = !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, 5).getDisplayValues()
+    .filter(r => String(r[0]).trim() && String(r[2]).trim())
+    .map(r => ({ section: r[0].trim(), pos: r[1].trim(), time: r[2].trim(), by: r[3].trim(), when: r[4].trim() }));
+  return REDUCED_;
+}
+/** True when this spot is reduced at slot k and nobody has been put back in it. */
+function isReduced_(row, k, sched) {
+  const sl = sched.slots[k];
+  if (!sl || (row.cells[k] || []).length) return false;
+  return readReduced_().some(u => norm_(u.section) === norm_(row.section) && norm_(u.pos) === norm_(row.pos) && u.time === sl.label);
+}
+
+// Overseers (any spot) and keymen (their sections): reduce a spot for low traffic at some time slots, or undo it.
+// Reached through apiEdit (req.reduced). req has section, pos, times (slot labels), undo.
+function setReduced_(code, req) {
+  const me = leaderByCode_(code);
+  if (!me) return { ok: false, error: 'Your access code didn’t work. Please reopen your link.' };
+  const section = String(req.section || '').trim(), pos = String(req.pos || '').trim();
+  const times = (req.times || []).map(t => String(t).trim()).filter(Boolean);
+  if (!inSections_(me, section)) return { ok: false, error: 'You can only change spots in your own sections.' };
+  if (!times.length) return { ok: false, error: 'Something went wrong. Please refresh and try again.' };
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(15000)) return { ok: false, error: 'Someone else is saving a change right now. Please try again.' };
+  try {
+    const sched = readSchedule_();
+    const same = sched.rows.filter(r => r.section === section && r.pos === pos), row = same[0];
+    if (!row) return { ok: false, changed: true, error: 'That spot was just changed on the schedule. It will refresh so you can try again.' };
+    if (!pos || same.length > 1) return { ok: false, error: 'Only spots with their own number can be reduced.' };
+    const ks = times.map(t => sched.slots.findIndex(sl => sl.label === t));
+    if (ks.some(k => k < 0)) return { ok: false, changed: true, error: 'That time slot no longer exists. It will refresh.' };
+    if (!req.undo && ks.some(k => (row.cells[k] || []).length))
+      return { ok: false, changed: true, error: 'Someone was just put in that spot. It will refresh so you can see it.' };
+    const sh = sheet_(REDUCED_TAB, REDUCED_HEADER);
+    const vals = sh.getDataRange().getDisplayValues();
+    for (let i = vals.length - 1; i >= 1; i--) {
+      if (norm_(vals[i][0]) === norm_(section) && norm_(vals[i][1]) === norm_(pos) && times.indexOf(vals[i][2]) >= 0) sh.deleteRow(i + 1);
+    }
+    const stamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'M/d/yyyy h:mm a');
+    if (!req.undo) times.forEach(t => sh.appendRow([section, pos, t, me.name, stamp]));
+    // reopening a time that also has "No shift needed" on the sheet: erase it so the spot shows + Fill
+    if (req.undo) {
+      const sched_ = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
+      ks.forEach(k => { if (row.closed.indexOf(k) >= 0) sched_.getRange(row.id, sched.slots[k].col + 1).setValue(''); });
+    }
+    sheet_(LOG_TAB, ['When', 'By', 'Role', 'Section', 'Spot', 'Time', 'Action', 'Removed', 'Added', 'Conflict warning', 'Reviewed'])
+      .appendRow([stamp, me.name, me.role, section, row.spot, times.join(', '), req.undo ? 'Staffed again' : 'Reduced (low traffic)', '', '', '', me.all ? 'n/a' : '']);
+    SpreadsheetApp.flush();
+    REDUCED_ = null;
+    return { ok: true };
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Overseers: mark a keyman change as reviewed. */
+function apiReview(code, logRow) {
+  const me = overseer_(code);
+  if (!me) return { ok: false };
+  const sh = sheet_(LOG_TAB, ['When']);
+  sh.getRange(Number(logRow), 11).setValue('Reviewed by ' + me.name);
+  return { ok: true };
+}
+
+/* ==================== READ / UNREAD (per leader) ==================== */
+// Browsers inside Apps Script often lose their saved data (new deployments, Safari privacy),
+// so what each keyman/overseer has read is kept in Script Properties instead.
+
+function readSeen_(me) {
+  const p = PropertiesService.getScriptProperties();
+  let conflicts = null;
+  try { conflicts = JSON.parse(p.getProperty('seenConf|' + me.key) || 'null'); } catch (e) {}
+  return { release: p.getProperty('seenRel|' + me.key), conflicts: Array.isArray(conflicts) ? conflicts : null };
+}
+
+/** Save what a leader has read. release: newest version they opened; conflicts: short ids of conflicts they've seen. */
+function apiMarkSeen(code, data) {
+  const c = String(code || '').trim().toUpperCase();
+  const me = c ? readLeaders_().filter(l => l.code && l.code === c)[0] : null;
+  if (!me) return { ok: false };
+  const p = PropertiesService.getScriptProperties();
+  data = data || {};
+  if (typeof data.release === 'string' && data.release && data.release.length <= 40) p.setProperty('seenRel|' + me.key, data.release);
+  if (me.all && Array.isArray(data.conflicts)) {
+    const ids = data.conflicts.map(String).filter(x => /^[0-9a-z]{1,12}$/.test(x)).slice(0, 600);
+    p.setProperty('seenConf|' + me.key, JSON.stringify(ids));
+  }
+  return { ok: true };
+}
+
+function leaderByCode_(code) {
+  const c = String(code || '').trim().toUpperCase();
+  const l = c ? readLeaders_().filter(x => x.code && x.code === c)[0] || null : null;
+  return l && !l.all && linksInactive_(readSettings_()) ? null : l;
+}
+function overseer_(code) {
+  const c = String(code || '').trim().toUpperCase();
+  return readLeaders_().filter(l => l.all && l.code && l.code === c)[0] || null;
+}
+
+function readIgnored_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(IGNORE_TAB);
+  const out = {};
+  if (sh) sh.getDataRange().getDisplayValues().slice(1).forEach(r => { if (r[0]) out[r[0]] = r[2]; });
+  return out;
+}
+
+/** Recent changes made from the web pages (newest first). */
+function readChanges_() {
+  const sh = SpreadsheetApp.getActive().getSheetByName(LOG_TAB);
+  if (!sh) return [];
+  const vals = sh.getDataRange().getDisplayValues();
+  const out = [];
+  for (let i = vals.length - 1; i >= 1 && out.length < 60; i--) {
+    const v = vals[i];
+    out.push({ row: i + 1, when: v[0], by: v[1], role: v[2], section: v[3], spot: v[4], time: v[5], action: v[6],
+      removed: v[7], added: v[8], warning: v[9], reviewed: v[10] });
+  }
+  return out;
+}
+
+/**
+ * Empty cells in the early "no open spots" times that someone was taken out of (Remove, Swap to nobody,
+ * or Cancellation/No-show in the Change Log). Returned as [rowId, slot] pairs.
+ */
+function vacatedEarly_(sched, noOpenSlots) {
+  if (!noOpenSlots.length) return [];
+  const sh = SpreadsheetApp.getActive().getSheetByName(LOG_TAB);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const hit = {};
+  sh.getRange(2, 1, sh.getLastRow() - 1, 8).getDisplayValues().forEach(v => {
+    if (v[6] === 'Remove') hit[norm_(v[4]) + '|' + norm_(v[5])] = 1;
+    else if (v[6] === 'No-show') String(v[5]).split(';').forEach(p => {   // "Spot 26 at 6:45 AM; ..."
+      const m = p.trim().match(/^(.+) at (.+)$/);
+      if (m) hit[norm_(m[1]) + '|' + norm_(m[2])] = 1;
+    });
+  });
+  const out = [];
+  sched.rows.forEach(r => noOpenSlots.forEach(k => {
+    if ((r.cells[k] || []).length || r.closed.indexOf(k) >= 0) return;
+    if (hit[norm_(r.spot) + '|' + norm_(r.override || sched.slots[k].label)]) out.push([r.id, k]);
+  }));
+  return out;
+}
+
+/* ===================== FAILED-CODE LIMIT ===================== */
+
+function tooManyFailures_() {
+  return Number(CacheService.getScriptCache().get('fails') || 0) >= 40;
+}
+function recordFailure_() {
+  const c = CacheService.getScriptCache();
+  c.put('fails', String(Number(c.get('fails') || 0) + 1), 900);
+}
+
+/* ========================= HELPERS ========================= */
+
+function publicEvent_(s) {
+  let iso = '', pretty = s.eventDate || '';
+  const d = new Date(s.eventDate);
+  if (!isNaN(d)) {
+    iso = Utilities.formatDate(d, Session.getScriptTimeZone(), 'yyyy-MM-dd');
+    pretty = Utilities.formatDate(d, Session.getScriptTimeZone(), 'EEEE, MMMM d, yyyy');
+  }
+  return {
+    title: s.eventTitle || '', scripture: s.themeScripture || '', name: s.eventName || '',
+    date: pretty, iso: iso, location: s.location || '', department: s.department || ''
+  };
+}
+
+function parseTime_(text) {
+  const m = String(text).match(/(\d{1,2}):(\d{2})\s*([AaPp])\.?[Mm]?/);
+  if (!m) return null;
+  let h = Number(m[1]) % 12;
+  if (m[3].toUpperCase() === 'P') h += 12;
+  return h * 60 + Number(m[2]);
+}
+
+function fmtTime_(min) {
+  const h = Math.floor(min / 60), m = min % 60;
+  return ((h % 12) || 12) + ':' + (m < 10 ? '0' : '') + m + ' ' + (h < 12 ? 'AM' : 'PM');
+}
+
+function spotLabel_(pos, sec) {
+  const p = String(pos).replace(/^\*+/, '').trim();
+  if (!p) return sec || 'Assignment';
+  return /^\d/.test(p) ? 'Spot ' + p : p;
+}
+
+/** A cell marked "No shift needed" is intentionally empty (not an open spot, not a name). */
+const CLOSED_TEXT = 'No shift needed';
+function isClosed_(raw) { return /^no\s*shift/i.test(String(raw).trim()); }
+
+/** Accepts "Last, First"; also fixes "First Last" and "A + B" cells. */
+function splitNames_(raw) {
+  if (!raw) return [];
+  return String(raw).split(/\s*(?:\+|&|\n)\s*/).map(x => toLastFirst_(x.trim())).filter(Boolean);
+}
+
+function toLastFirst_(n) {
+  n = String(n).replace(/\s+/g, ' ').trim();
+  if (!n || n.indexOf(',') >= 0) return n;
+  const parts = n.split(' ');
+  if (parts.length < 2) return n;
+  const last = parts.pop();
+  return last + ', ' + parts.join(' ');
+}
+
+function norm_(x) { return String(x || '').toLowerCase().replace(/\./g, '').replace(/\s+/g, ' ').trim(); }
+function camel_(label) {
+  return norm_(label).replace(/[^a-z0-9]+/g, ' ').split(' ').filter(Boolean)
+    .map((w, i) => i ? w[0].toUpperCase() + w.slice(1) : w).join('');
+}
+function splitList_(t) { return String(t || '').split(',').map(x => x.trim()).filter(Boolean); }
+function uniq_(arr) { const s = {}; return arr.filter(x => (s[x] ? false : (s[x] = true))); }
+function nameSort_(a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : a.toLowerCase() > b.toLowerCase() ? 1 : 0; }
+
+
+/* ========================= RELEASE NOTES ("What's new") ========================= */
+
+const RELEASE_TAB = 'Release Notes';
+const RELEASE_HEADER = ['Version', 'Date', 'Title', 'Type', 'Show to', 'Note'];
+// First-time contents of the Release Notes tab (only used when the tab doesn't exist yet)
+const RELEASE_SEED = [
+  ['Upcoming', '', '', 'New', 'Everyone', 'What’s new card: see the latest app updates right on your page.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'New', 'Overseers', 'Cancellation/No-show button: clears someone’s spots for the day and keeps them out of the Swap/Fill list.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'New', 'Overseers', 'Add back to roster: undo a cancellation from the Conflicts tab or the person’s name card.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'New', 'Everyone', 'Open spots in Full day view: tap the red bar to see every open spot, each with a + Fill button.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'Improved', 'Everyone', 'Open spots now show in schedule order (3B appears right after Spot 3).'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'Improved', 'Overseers', 'The Conflicts tab shows a red number only for new conflicts, which clears once you’ve looked.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'Improved', 'Everyone', 'Every pop-up has an ✕ to close it, and Cancel stays visible while you scroll the Fill/Swap list.'],
+  ['1.1', 'Oct 23, 2026', 'Open Spots & Cancellations', 'Fixed', 'Everyone', 'Swap and Remove on a person’s name card work again.']
+];
+
+/** Creates the Release Notes tab (with the notes so far) the first time it's needed. */
+function releaseSheet_() {
+  const ss = SpreadsheetApp.getActive();
+  let sh = ss.getSheetByName(RELEASE_TAB);
+  if (sh) return sh;
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return null;
+  try {
+    sh = ss.getSheetByName(RELEASE_TAB);
+    if (sh) return sh;
+    sh = ss.insertSheet(RELEASE_TAB);
+    const rows = [RELEASE_HEADER].concat(RELEASE_SEED);
+    sh.getRange(1, 1, 200, RELEASE_HEADER.length).setNumberFormat('@');   // keep dates and versions as typed
+    sh.getRange(1, 1, rows.length, RELEASE_HEADER.length).setValues(rows);
+    sh.getRange(1, 1, 1, RELEASE_HEADER.length).setFontWeight('bold').setBackground('#4A6DA7').setFontColor('#FFFFFF');
+    sh.setFrozenRows(1);
+    sh.setColumnWidth(1, 90); sh.setColumnWidth(2, 110); sh.setColumnWidth(3, 230);
+    sh.setColumnWidth(4, 90); sh.setColumnWidth(5, 95); sh.setColumnWidth(6, 520);
+    sh.getRange(2, 6, 199, 1).setWrap(true);
+    sh.getRange(2, 4, 199, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+      .requireValueInList(['New', 'Improved', 'Fixed'], true).setAllowInvalid(false).build());
+    sh.getRange(2, 5, 199, 1).setDataValidation(SpreadsheetApp.newDataValidation()
+      .requireValueInList(['Everyone', 'Overseers'], true).setAllowInvalid(false).build());
+    sh.getRange(1, 8).setValue('How to use: one row per change. Rows marked “Upcoming” stay hidden. ' +
+      'When you release, change “Upcoming” to the new version number and fill in Date and Title. ' +
+      '“Overseers” rows are hidden from keymen.').setWrap(true).setFontStyle('italic').setFontColor('#757575');
+    sh.setColumnWidth(8, 280);
+    SpreadsheetApp.flush();
+    return sh;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Released notes grouped by version, newest first. Overseer-only notes are skipped for keymen. */
+function readReleaseNotes_(isOverseer) {
+  const sh = releaseSheet_();
+  if (!sh || sh.getLastRow() < 2) return [];
+  const vals = sh.getRange(2, 1, sh.getLastRow() - 1, 6).getDisplayValues();
+  const byVer = {}, order = [];
+  vals.forEach(r => {
+    const ver = String(r[0]).trim().replace(/^v/i, '');
+    const note = String(r[5]).trim();
+    if (!ver || !note || /^upcoming$/i.test(ver)) return;
+    if (!isOverseer && /^overseer/i.test(String(r[4]).trim())) return;
+    if (!byVer[ver]) { byVer[ver] = { version: ver, date: '', title: '', items: [] }; order.push(ver); }
+    const g = byVer[ver];
+    if (!g.date && String(r[1]).trim()) g.date = String(r[1]).trim();
+    if (!g.title && String(r[2]).trim()) g.title = String(r[2]).trim();
+    const t = String(r[3]).trim().toLowerCase();
+    g.items.push({ type: t.indexOf('fix') === 0 ? 'Fixed' : t.indexOf('improv') === 0 ? 'Improved' : 'New', note: note });
+  });
+  const num = v => v.split('.').map(x => parseInt(x, 10) || 0);
+  return order.map(v => byVer[v]).sort((a, b) => {
+    const x = num(a.version), y = num(b.version);
+    for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (y[i] || 0) - (x[i] || 0);
+    return 0;
+  });
+}
