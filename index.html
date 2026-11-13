@@ -308,6 +308,7 @@
   .sheet .btns .btn{flex:1}
   .mapbox{position:fixed;inset:0;z-index:30;background:#fff;display:none;flex-direction:column}
   .mapbox.show{display:flex}
+  .docimg{display:block;width:100%;margin:0 0 14px;border:1px solid var(--line);border-radius:10px;background:#fff}
   .mapbox .top{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line)}
   .mapbox .img{flex:1;overflow:auto;-webkit-overflow-scrolling:touch}
   .mapbox img{width:100%;min-width:640px;display:block}
@@ -352,7 +353,7 @@
 const BOOT = (function (b) {
   if (b) return Object.assign(b, { shared: false });
   const q = new URLSearchParams(location.search), app = (q.get('app') || '').replace(/[^\w-]/g, '');
-  return { shared: true, app: app, name: q.get('name') || '', code: q.get('code') || '', now: q.get('now') || '', build: '',
+  return { shared: true, app: app, name: q.get('name') || '', code: q.get('code') || '', now: q.get('now') || '', doc: q.get('doc') || '', build: '',
     appUrl: app ? 'https://script.google.com/macros/s/' + app + '/exec' : '', pageUrl: location.origin + location.pathname };
 })(null);
 const $ = s => document.querySelector(s);
@@ -404,7 +405,11 @@ function copy(text) {
 let LINKS = {};               // normalized "last, first" -> code, for the people this page can send links to
 let VCODE = '';               // the code this volunteer page was opened with
 function personalLink(name) { const c = LINKS[norm(name)]; return c ? linkFor(c) : ''; }
-function docUrl(key) { return BOOT.appUrl + '?doc=' + encodeURIComponent(key); }
+function docUrl(key) {   // maps open on the shared page too (no Google banner, no multi-account error)
+  const id = BOOT.shared ? BOOT.app : appIdOf(BOOT.appUrl);
+  if (!id) return BOOT.appUrl + '?doc=' + encodeURIComponent(key);
+  return (BOOT.shared ? BOOT.pageUrl : SHARED_PAGE) + '?app=' + id + '&doc=' + encodeURIComponent(key);
+}
 const DOC_ICON = { assign: '🗺', dept: '📍', evac: '🚨' };
 function meetingCard(m) {
   if (!m) return '';
@@ -538,6 +543,21 @@ $('#scrim').onclick = closeSheet;
 /* =========================================================
    HOME — no name list: everyone opens their own link (or types their code)
    ========================================================= */
+/* A map or document (Assignment Map, Department Directory, Evacuation Maps), opened from its button */
+function docPage(key) {
+  spin();
+  call('apiMap', key).then(d => {
+    if (d.event) paintHeader(d.event);
+    if (!d.images || !d.images.length) {
+      $('#app').innerHTML = '<div class="card center"><h3>This document isn’t available</h3><p class="muted">Ask the overseers if you need it.</p></div>';
+      return;
+    }
+    $('#app').innerHTML = '<div class="card"><p class="eyebrow">' + esc(d.label) + '</p><p class="small muted" style="margin:0">Pinch or zoom to see details.</p></div>' +
+      d.images.map(src => '<img class="docimg" alt="' + esc(d.label) + '" src="' + src + '">').join('');
+    document.title = d.label;
+  }, e => showError(e.message));
+}
+
 function home(msg) {
   setUrl({});
   spin();
@@ -1911,7 +1931,8 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 
 /* ---------- start ---------- */
 $('#foot').textContent = 'Attendant Department';
-if (BOOT.code) leader(BOOT.code);
+if (BOOT.doc) docPage(BOOT.doc);
+else if (BOOT.code) leader(BOOT.code);
 else if (BOOT.name) home('Personal links now use an access code, so this older link no longer works. Ask your keyman or the overseers for your current link.');
 else home();
 </script>

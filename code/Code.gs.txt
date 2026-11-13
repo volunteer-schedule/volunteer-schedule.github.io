@@ -351,8 +351,21 @@ function docPage_(key) {
 }
 
 /** Assignment map image as a data URL (read from Google Drive). */
-function apiMap() {
+/**
+ * Map/document images for the shared page (it can't use the Apps Script ?doc= page).
+ * With a key: { label, event, images: [data URLs] }. Without one: the Assignment Map image (older pages).
+ */
+function apiMap(key) {
   const s = readSettings_();
+  if (key) {
+    const doc = DOCS.filter(d => d.key === key)[0];
+    const ids = doc ? String(s[doc.setting] || '').match(/[-\w]{25,}/g) || [] : [];
+    const images = ids.map(id => {
+      try { const b = DriveApp.getFileById(id).getBlob(); return 'data:' + b.getContentType() + ';base64,' + Utilities.base64Encode(b.getBytes()); }
+      catch (err) { return ''; }
+    }).filter(Boolean);
+    return { label: doc ? doc.label.replace('View ', '') : '', event: publicEvent_(s), images: images };
+  }
   const m = String(s.mapImageLink || '').match(/[-\w]{25,}/);
   if (!m) return '';
   const cache = CacheService.getScriptCache();
