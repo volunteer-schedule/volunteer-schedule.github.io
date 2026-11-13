@@ -373,8 +373,13 @@ function call(fn, ...args) {
     .then(d => { if (!d || d.error) throw new Error((d && d.error) || 'Something went wrong. Try again.'); return d.result; });
 }
 /** Someone's personal link: on the shared page it also carries the schedule's app ID. */
+const SHARED_PAGE = 'https://volunteer-schedule.github.io/';
+function appIdOf(url) { const m = String(url || '').match(/\/s\/([\w-]+)\/exec$/); return m ? m[1] : ''; }
 function linkFor(code) {
-  return BOOT.shared ? BOOT.pageUrl + '?app=' + BOOT.app + '&code=' + encodeURIComponent(code) : BOOT.appUrl + '?code=' + encodeURIComponent(code);
+  // links always open the shared page (no Google banner); only the /dev test link keeps Apps Script links
+  const id = BOOT.shared ? BOOT.app : appIdOf(BOOT.appUrl);
+  if (!id) return BOOT.appUrl + '?code=' + encodeURIComponent(code);
+  return (BOOT.shared ? BOOT.pageUrl : SHARED_PAGE) + '?app=' + id + '&code=' + encodeURIComponent(code);
 }
 function busy(btn, label) { btn.disabled = true; btn.classList.add('loading'); btn.innerHTML = '<span class="spin"></span>' + label; }
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); setTimeout(() => t.classList.remove('show'), 1800); }

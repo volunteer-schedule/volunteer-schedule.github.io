@@ -3,9 +3,8 @@
  * -----------------------------------------------------------
  * Reads the "Schedule" and "Web Settings" tabs of this spreadsheet
  * (plus phone, age, and scheduling limitations from the Master Contact Sheet) and serves:
- *   - Volunteer page:  ...exec?code=THEIRCODE (codes are on the Master Contact Sheet)
- *   - Keyman page:     ...exec?code=THEIRCODE
- *   - Overseer page:   ...exec?code=OVERSEERCODE
+ *   - Everyone's link: https://volunteer-schedule.github.io/?app=THIS-APP-ID&code=THEIRCODE (codes are on the
+ *     Master Contact Sheet). The older ...exec?code=THEIRCODE links still work too.
  *
  * You should never need to edit this file. Everything you change
  * day to day lives in the Schedule and Web Settings tabs.
@@ -1223,6 +1222,12 @@ function rememberExecUrl_(u) {
   } catch (e) { /* never break the page over this */ }
 }
 
+/** Start of everyone's personal link: the shared page plus this schedule's app ID (falls back to the /exec link). */
+function sharedLinkBase_(execUrl) {
+  const m = String(execUrl).match(/\/s\/([\w-]+)\/exec$/);
+  return m ? 'https://volunteer-schedule.github.io/?app=' + m[1] + '&code=' : execUrl + '?code=';
+}
+
 /** The web app's /exec link, or '' if no page has been opened from it yet. */
 function execUrl_() {
   try { return PropertiesService.getScriptProperties().getProperty('APP_URL') || ''; } catch (e) { return ''; }
@@ -1245,7 +1250,7 @@ function ensureLinkCol_(s, loud) {
   if (!s || !s.contactSheetId) return 'No Contact Sheet ID.';
   const url = execUrl_();
   if (!url) return 'No saved /exec link yet.';
-  const props = PropertiesService.getScriptProperties(), want = 'v2|' + s.contactSheetId + '|' + url;   // bump v2 when the formula changes
+  const props = PropertiesService.getScriptProperties(), want = 'v3|' + s.contactSheetId + '|' + url;   // bump v3 when the formula changes
   if (props.getProperty('LINKCOL_FOR') === want) return 'Already up to date.';
   try {
     let t = codeTab_(s);
@@ -1262,7 +1267,7 @@ function ensureLinkCol_(s, loud) {
     const C = colLetter_(t.iC);
     const head = t.sh.getRange(1, iK + 1);
     if (t.sh.getMaxRows() > 1) t.sh.getRange(2, iK + 1, t.sh.getMaxRows() - 1, 1).clearContent();   // the formula fills these
-    head.setFormula('={"' + LINK_HEADER + '";ARRAYFORMULA(IF(' + C + '2:' + C + '="","",HYPERLINK("' + url + '?code="&' + C + '2:' + C + ',"' + LINK_HEADER + '")))}')
+    head.setFormula('={"' + LINK_HEADER + '";ARRAYFORMULA(IF(' + C + '2:' + C + '="","",HYPERLINK("' + sharedLinkBase_(url) + '"&' + C + '2:' + C + ',"' + LINK_HEADER + '")))}')
       .setFontWeight('bold')
       .setNote('Filled in by the app: each person\'s own link, made from their Access Code. Hover over it and click the copy icon to copy the full link. ' +
         'It updates by itself when a code changes. Don\'t type in this column.');
