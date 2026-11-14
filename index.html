@@ -370,8 +370,25 @@ function call(fn, ...args) {
   if (!BOOT.appUrl) return Promise.reject(new Error('This link is missing its schedule ID. Ask your keyman or the overseers for your current link.'));
   // a plain-text POST needs no extra permission check from the browser, so it works from GitHub to Google
   return fetch(BOOT.appUrl, { method: 'POST', body: JSON.stringify({ fn: fn, args: args }) })
-    .then(r => r.json(), () => { throw new Error('Check your signal and try again.'); })
+    .then(r => r.json().catch(() => { throw busyError('Google is busy right now. Please try again in a moment.'); }),
+      () => { throw busyError('Check your signal and try again.'); })
     .then(d => { if (!d || d.error) throw new Error((d && d.error) || 'Something went wrong. Try again.'); return d.result; });
+}
+function busyError(msg) { const e = new Error(msg); e.busy = true; return e; }
+// Errors worth trying again: no signal, or Google too busy / timed out for a moment
+const BUSY_RE = /busy|too many|timed? ?out|server error|service error|unavailable|try again later|wait a bit|simultaneous|rate limit|internal error|network|connection|address unavailable|lock/i;
+/**
+ * Loading data (never saving): if Google is busy, quietly try twice more with a short wait before showing an error.
+ * Saves always use call() and are never retried, since a retry could make the same change twice.
+ */
+function load(fn, ...args) {
+  let tries = 0;
+  const go = () => call(fn, ...args).catch(e => {
+    const msg = String((e && e.message) || e);
+    if (++tries > 2 || !(e && e.busy || BUSY_RE.test(msg)) || /maximum execution time/i.test(msg)) throw e;
+    return new Promise(ok => setTimeout(ok, tries * 2000 + Math.random() * 2000)).then(go);
+  });
+  return go();
 }
 /** Someone's personal link: on the shared page it also carries the schedule's app ID. */
 const SHARED_PAGE = 'https://volunteer-schedule.github.io/';
@@ -546,7 +563,7 @@ $('#scrim').onclick = closeSheet;
 /* A map or document (Assignment Map, Department Directory, Evacuation Maps), opened from its button */
 function docPage(key) {
   spin();
-  call('apiMap', key).then(d => {
+  load('apiMap', key).then(d => {
     if (d.event) paintHeader(d.event);
     if (!d.images || !d.images.length) {
       $('#app').innerHTML = '<div class="card center"><h3>This document isn’t available</h3><p class="muted">Ask the overseers if you need it.</p></div>';
@@ -561,7 +578,7 @@ function docPage(key) {
 function home(msg) {
   setUrl({});
   spin();
-  call('apiHome').then(d => { paintHeader(d.event); codeForm(msg); }, e => showError(e.message));
+  load('apiHome').then(d => { paintHeader(d.event); codeForm(msg); }, e => showError(e.message));
 }
 
 /* =========================================================
@@ -570,7 +587,7 @@ function home(msg) {
 function volunteer(code) {
   VCODE = String(code || '').trim().toUpperCase();
   spin(); setUrl({ code: VCODE });
-  call('apiVolunteer', VCODE).then(d => {
+  load('apiVolunteer', VCODE).then(d => {
     paintHeader(d.event);
     if (d.inactive) return paintInactive();
     if (d.badLink) return codeForm('That link didn’t work. It may have been replaced with a new one. Ask your keyman or the overseers for your current link.');
@@ -711,14 +728,14 @@ let refreshTimer = null;
 
 function leader(code) {
   spin();
-  call('apiLeader', String(code || '').trim()).then(d => {
+  load('apiLeader', String(code || '').trim()).then(d => {
     if (!d.ok) {
       if (d.volunteer) return volunteer(code);
-      if (!EVENT) call('apiHome').then(h => paintHeader(h.event));
+      if (!EVENT) load('apiHome').then(h => paintHeader(h.event), () => {});
       if (d.inactive) return paintInactive();
       return codeForm(d.locked ? 'Too many wrong codes were tried. Please wait 15 minutes.' : 'That link or code didn’t work. It may have been replaced with a new one. Ask your keyman or the overseers for your current link.');
     }
-    L = d; L.code = String(code).trim().toUpperCase(); LINKS = d.links || {};
+    L = d; L.code = String(code).trim().toUpperCase(); L.fullAt = Date.now(); LINKS = d.links || {}; NEEDFULL = false;
     SEEN_MEM = null; SEEN_REL = null;   // reload what this leader has read from the server
     applySharedNotes(L);
     if (SHARED_NOTES === null) loadSharedNotes().then(() => { if (L && SHARED_NOTES) { applySharedNotes(L); paintLeader(); } });
@@ -727,21 +744,51 @@ function leader(code) {
     if (UI.slot === null || UI.slot >= d.slots.length) UI.slot = currentSlot();
     if (UI.sec !== 'ALL' && d.sections.indexOf(UI.sec) < 0) UI.sec = 'ALL';
     paintLeader();
-    clearInterval(refreshTimer);
-    refreshTimer = setInterval(() => silentRefresh(), 120000);
+    scheduleRefresh();
   }, e => showError(e.message));
 }
-function silentRefresh() {
-  if (!L || PENDING) return;   // a save is still going; refresh once it finishes
-  const seq = EDITSEQ;
-  call('apiLeader', L.code).then(d => {
-    if (!d.ok) return;
+/* ---------- auto-refresh, gentle on the server when many pages are open ----------
+   - about every 2 minutes, with a few random seconds added so pages don't all ask at the same moment
+   - paused while the page is hidden (phone locked, another tab); checks right away when it's back on screen
+   - a timed refresh first asks "anything changed since I loaded?" and only downloads everything when it did
+     (and in full at least every 10 minutes, just in case)
+   After a save, silentRefresh() always reloads in full. */
+const REFRESH_MS = 120000, REFRESH_JITTER_MS = 30000, FULL_EVERY_MS = 600000;
+let LASTCHECK = 0, NEEDFULL = false;
+function scheduleRefresh() {
+  clearTimeout(refreshTimer); refreshTimer = null;
+  if (!L || document.hidden) return;
+  refreshTimer = setTimeout(() => { silentRefresh({ check: true }); scheduleRefresh(); },
+    REFRESH_MS - REFRESH_JITTER_MS / 2 + Math.random() * REFRESH_JITTER_MS);
+}
+function silentRefresh(opts) {
+  const check = !!(opts && opts.check);
+  if (!L) return;
+  if (PENDING) return;   // a save is still going; it refreshes in full once it finishes
+  if (document.hidden) { if (!check) NEEDFULL = true; return; }   // catch up when the page is back on screen
+  const full = !check || NEEDFULL || !L.ver || Date.now() - (L.fullAt || 0) > FULL_EVERY_MS;
+  const seq = EDITSEQ, code = L.code;
+  LASTCHECK = Date.now();
+  (full ? load('apiLeader', code) : load('apiLeader', code, { since: L.ver })).then(d => {
+    if (!d || !d.ok || !L || L.code !== code) return;
+    if (d.same) {   // nothing changed: keep what's on screen, just say when it was last checked
+      if (d.loadedAt) { L.loadedAt = d.loadedAt; const u = $('#upd'); if (u) u.textContent = d.loadedAt; }
+      return;
+    }
     whenStill(() => {
       if (seq !== EDITSEQ || PENDING) return;   // an edit happened meanwhile; this copy is already out of date
-      const c = L.code; L = d; L.code = c; LINKS = d.links || {}; applySharedNotes(L); repaintInPlace();
+      L = d; L.code = code; L.fullAt = Date.now(); NEEDFULL = false; LINKS = d.links || {}; applySharedNotes(L); repaintInPlace();
     });
-  });
+  }, () => {});   // a missed refresh is fine; the next one tries again
 }
+function onScreenAgain() {
+  if (document.hidden) { clearTimeout(refreshTimer); refreshTimer = null; return; }
+  if (!L) return;
+  if (NEEDFULL || Date.now() - LASTCHECK > 10000) silentRefresh({ check: true });
+  scheduleRefresh();
+}
+document.addEventListener('visibilitychange', onScreenAgain);
+window.addEventListener('pageshow', e => { if (e.persisted) onScreenAgain(); });
 // Redraw without losing your place: keep where the page and the Full day grid were scrolled to
 function repaintInPlace() { paintLeader(); }
 // Wait until no finger is on the screen and scrolling has stopped. Redrawing mid-swipe
@@ -931,7 +978,7 @@ function drawLeader() {
   const unrev = (d.changes || []).filter(c => c.role === 'Keyman' && !c.reviewed).length;
   let html = '<div class="card"><div class="row"><div class="avatar">' + esc(initials(me.name)) + '</div><div class="grow"><div style="font-weight:700;font-size:17px">' +
     esc(firstLast(me.name)) + '</div><div class="muted small">' + esc(me.role) + (me.all ? ' · All sections' : ' · ' + esc(me.sections.join(', '))) + '</div></div>' +
-    '<button class="btn sm line" id="refresh">↻</button></div><div class="small muted" style="margin-top:8px">Updated ' + esc(d.loadedAt) +
+    '<button class="btn sm line" id="refresh">↻</button></div><div class="small muted" style="margin-top:8px">Updated <span id="upd">' + esc(d.loadedAt) + '</span>' +
     ' · refreshes every 2 minutes' + (d.releases && d.releases.length && !releaseUnseen(d.releases) ? ' · <button class="wnlink" id="wnlink">✨ What’s new</button>' : '') + '</div>' + docRow(d.docs) + whatsNewRow(d.releases) + updateNotice(d) + (me.all ? '' : alertBox(sectionAlerts(d.sectionNotes || {}, d.sections))) + '</div>';
 
   if (me.all && dups) {
@@ -1729,7 +1776,12 @@ function ciCall(req) {
   req = Object.assign({ checkin: true }, req);
   return CI.who.mode === 'checker' ? call('apiVolunteer', CI.who.code, req) : call('apiEdit', L.code, req);
 }
-function ciStart(paint) { ciStop(); CI.timer = setInterval(() => ciCall({ op: 'poll' }).then(res => { if (res && res.ok) { ciTake(res); paint(); } }, () => {}), 10000); }
+function ciStart(paint) {
+  ciStop();
+  const poll = () => { if (!document.hidden) ciCall({ op: 'poll' }).then(res => { if (res && res.ok) { ciTake(res); paint(); } }, () => {}); };
+  poll();   // right away, so the list is current when the screen opens
+  CI.timer = setInterval(poll, 10000);   // (skipped while the page is hidden)
+}
 function ciStop() { if (CI.timer) { clearInterval(CI.timer); CI.timer = null; } }
 function ciTake(res) { CI.status = res.status || {}; if (res.checkers) CI.checkers = res.checkers; }
 
@@ -1926,7 +1978,7 @@ function newVersion() {
   const busyNow = PENDING || $('#sheet').classList.contains('show') || (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName));
   if (!busyNow) { try { window.top.location.href = url; } catch (e) { /* blocked: the bar stays */ } }
 }
-setInterval(checkBuild, 120000);
+(function buildLoop() { setTimeout(() => { if (!document.hidden) checkBuild(); buildLoop(); }, 105000 + Math.random() * 30000); })();
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') checkBuild(); });
 
 /* ---------- start ---------- */

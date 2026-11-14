@@ -58,6 +58,95 @@ function doPost(e) {
   return ContentService.createTextOutput(JSON.stringify(out)).setMimeType(ContentService.MimeType.JSON);
 }
 
+/* ================= HEAVY USE: CHANGE STAMP + SHORT SHARED CACHE ================= */
+// DATA_VER (a script property) changes every time the schedule data changes: every save from a page, and every edit
+// typed into either sheet (the onChange triggers run syncDataSource, which marks it). Open pages send the stamp they
+// loaded with; when it hasn't changed, apiLeader answers "same" without reading any sheet.
+// Sheet reads are also kept for a few seconds (CacheService, filed under the current stamp), so pages that refresh at
+// nearly the same moment share one read. A save changes the stamp, so nobody ever gets the old copy after a change.
+// Saves themselves always read the sheets directly (FRESH_), never the cache.
+const DATA_VER_KEY = 'DATA_VER';
+const READ_CACHE_SECS = 15;
+let FRESH_ = false;     // true while saving: read the sheets, not the cache
+let VER_ = null;        // the stamp, read once per request
+let PARTIAL_ = false;   // a read failed this request, so the page must not trust this copy as complete
+const READS_ = {};      // sheet reads already done in this request (as JSON, so callers can't change each other's copy)
+
+function dataVer_() {
+  if (VER_ === null) {
+    try { VER_ = PropertiesService.getScriptProperties().getProperty(DATA_VER_KEY) || ''; } catch (e) { VER_ = ''; }
+  }
+  return VER_;
+}
+
+/** Something changed: give the data a new stamp. Saves first so a page that sees the new stamp also sees the new data. */
+function markChanged_() {
+  try { SpreadsheetApp.flush(); } catch (e) { /* nothing to save */ }
+  VER_ = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  Object.keys(READS_).forEach(k => delete READS_[k]);
+  try { PropertiesService.getScriptProperties().setProperty(DATA_VER_KEY, VER_); }
+  catch (e) { console.error('Could not mark the data as changed: ' + e); }
+  return VER_;
+}
+
+/** Run a save: always read the sheets directly, and mark the data as changed afterward (even if it stopped partway). */
+function saving_(fn) {
+  FRESH_ = true;
+  try { return fn(); } finally { markChanged_(); }
+}
+
+/** The "anything changed?" check can only be trusted while the sheet-edit triggers are on (they mark typed edits). */
+function changeWatchOn_() {
+  try { return !!PropertiesService.getScriptProperties().getProperty('SYNC_FOR'); } catch (e) { return false; }
+}
+
+/** A sheet read shared by requests that arrive within a few seconds of each other. build() throws if the read fails. */
+function cachedRead_(name, build) {
+  if (FRESH_) return build();
+  if (READS_[name] !== undefined) return JSON.parse(READS_[name]);
+  const key = 'rd|' + name + '|' + dataVer_();
+  let json = dataVer_() ? cacheGetBig_(key) : null;
+  if (json === null) {
+    const v = build();
+    json = JSON.stringify(v === undefined ? null : v);
+    if (dataVer_()) cachePutBig_(key, json, READ_CACHE_SECS);
+  }
+  READS_[name] = json;
+  return JSON.parse(json);
+}
+
+// Cache values are limited to 100 KB, so text is zipped and split into pieces when needed.
+const CACHE_PIECE = 90000;
+function cachePutBig_(key, text, secs) {
+  try {
+    const z = Utilities.base64Encode(Utilities.gzip(Utilities.newBlob(text, 'application/json')).getBytes());
+    const n = Math.ceil(z.length / CACHE_PIECE);
+    if (n > 40) return;   // too big to bother; just read the sheet
+    const map = {};
+    if (n <= 1) map[key] = 'z:' + z;
+    else {
+      map[key] = 'n:' + n;
+      for (let i = 0; i < n; i++) map[key + '|' + i] = z.substr(i * CACHE_PIECE, CACHE_PIECE);
+    }
+    CacheService.getScriptCache().putAll(map, secs);
+  } catch (e) { console.error('Could not keep a copy of a sheet read: ' + e); }
+}
+function cacheGetBig_(key) {
+  try {
+    const c = CacheService.getScriptCache(), head = c.get(key);
+    if (!head) return null;
+    let z = '';
+    if (head.indexOf('z:') === 0) z = head.slice(2);
+    else {
+      const n = Number(head.slice(2)), keys = [];
+      for (let i = 0; i < n; i++) keys.push(key + '|' + i);
+      const got = c.getAll(keys);
+      for (let i = 0; i < n; i++) { if (!got[keys[i]]) return null; z += got[keys[i]]; }
+    }
+    return Utilities.ungzip(Utilities.newBlob(Utilities.base64Decode(z), 'application/x-gzip')).getDataAsString('UTF-8');
+  } catch (e) { return null; }
+}
+
 /** A short fingerprint of this version's page. Open pages compare it to notice a new deploy and reload. */
 function buildStamp_() {
   try {
@@ -94,9 +183,9 @@ function apiVolunteer(code, req) {
   if (req && (req.checkin || req.tally) && !featureOn_(s, req.checkin ? 'useBadgeCheckIn' : 'useAttendanceCounts'))
     return { ok: false, error: 'This feature is turned off.' };
   // badge checkers use their volunteer page for check-in (see CHECK IN / CHECK OUT below)
-  if (req && req.checkin) return checkinAction_({ name: toLastFirst_(name || ''), checker: true }, req);
+  if (req && req.checkin) { FRESH_ = true; return checkinAction_({ name: toLastFirst_(name || ''), checker: true }, req); }
   // counters submit their spot's attendance number from their own page
-  if (req && req.tally) return saveTally_({ name: toLastFirst_(name || '') }, req);
+  if (req && req.tally) return saving_(() => saveTally_({ name: toLastFirst_(name || '') }, req));
   const sched = readSchedule_();
   const key = norm_(toLastFirst_(name || ''));
   const mine = sched.assignments.filter(a => a.key === key);
@@ -177,7 +266,10 @@ function addPartners_(blocks, sched, s, key, book) {
 }
 
 /** Keyman / overseer view. Returns nothing useful without a valid code. */
-function apiLeader(code) {
+function apiLeader(code, req) {
+  const ver = dataVer_() || markChanged_();   // read before any sheet, so a change made meanwhile is noticed next time
+  // the page's quick "anything changed since I loaded?" check: no sheets are read
+  if (req && req.since && String(req.since) === ver && changeWatchOn_()) return { ok: true, same: true, ver: ver, loadedAt: nowLabel_() };
   if (tooManyFailures_()) return { ok: false, locked: true };
   const leaders = readLeaders_();
   const c = String(code || '').trim().toUpperCase();
@@ -225,7 +317,7 @@ function apiLeader(code) {
     docs: publicDocs_(s),
     meeting: meeting_(s),
     people: peopleBlocks_(sched, s, rows),
-    loadedAt: Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'h:mm a')
+    loadedAt: nowLabel_()
   };
 
   // People this leader can put into a spot, with every time slot they're already busy
@@ -289,8 +381,11 @@ function apiLeader(code) {
     out.contactList = Object.keys(all).map(k => ({ name: all[k], phone: info(k).phone || '', email: info(k).email || '',
       tag: (leaders.filter(l => l.key === k)[0] || {}).department || '' })).sort((a, b) => nameSort_(a.name, b.name));
   }
+  // the stamp this copy matches (blank if part of it couldn't be read, so the page reloads in full next time)
+  out.ver = PARTIAL_ ? '' : ver;
   return out;
 }
+function nowLabel_() { return Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'h:mm a'); }
 
 /* ========================= DOCUMENTS ========================= */
 
@@ -379,7 +474,8 @@ function apiMap(key) {
 
 /* ========================= READING ========================= */
 
-function readSettings_() {
+function readSettings_() { return cachedRead_('settings', readSettingsRaw_); }
+function readSettingsRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(SETTINGS_TAB);
   if (!sh) throw new Error('Missing tab: ' + SETTINGS_TAB);
   const vals = sh.getDataRange().getDisplayValues();
@@ -423,7 +519,8 @@ function readLeaders_() {
 }
 
 /** The old Oversight & Keymen table on Web Settings (empty if it's been removed). */
-function leaderTable_() {
+function leaderTable_() { return cachedRead_('leaderTable', leaderTableRaw_); }
+function leaderTableRaw_() {
   const vals = SpreadsheetApp.getActive().getSheetByName(SETTINGS_TAB).getDataRange().getDisplayValues();
   let start = -1;
   for (let i = 0; i < vals.length; i++) if (norm_(vals[i][0]) === LEADER_HEADER) { start = i + 1; break; }
@@ -448,21 +545,25 @@ function leaderTable_() {
 function contactRoles_(s) {
   if (!s.contactSheetId) return null;
   try {
-    const t = codeTab_(s), head = t.vals[0].map(norm_);
-    const iR = head.indexOf('role');
-    if (iR < 0 || t.iL < 0 || t.iF < 0) return null;
-    const iO = head.indexOf('oversees'), iD = head.findIndex(h => h.indexOf('department') === 0);
-    const get = (r, i) => (i >= 0 ? String(r[i] || '').trim() : '');
-    const out = [];
-    t.vals.slice(1).forEach(r => {
-      if (!codeRowKey_(t, r) || !get(r, iR)) return;
-      out.push({ name: get(r, t.iL) + ', ' + get(r, t.iF), role: get(r, iR), secText: get(r, iO), department: get(r, iD) });
-    });
-    return out;
+    return cachedRead_('roles|' + s.contactSheetId, () => contactRolesRaw_(s));
   } catch (err) {
     console.error('Could not read roles from the contact sheet: ' + err);
+    PARTIAL_ = true;
     return null;
   }
+}
+function contactRolesRaw_(s) {
+  const t = codeTab_(s), head = t.vals[0].map(norm_);
+  const iR = head.indexOf('role');
+  if (iR < 0 || t.iL < 0 || t.iF < 0) return null;
+  const iO = head.indexOf('oversees'), iD = head.findIndex(h => h.indexOf('department') === 0);
+  const get = (r, i) => (i >= 0 ? String(r[i] || '').trim() : '');
+  const out = [];
+  t.vals.slice(1).forEach(r => {
+    if (!codeRowKey_(t, r) || !get(r, iR)) return;
+    out.push({ name: get(r, t.iL) + ', ' + get(r, t.iF), role: get(r, iR), secText: get(r, iO), department: get(r, iD) });
+  });
+  return out;
 }
 
 /**
@@ -472,18 +573,22 @@ function contactRoles_(s) {
  * Only first-tab people can be picked when swapping or filling a spot.
  */
 function readContacts_(s) {
-  const out = {};
-  if (!s.contactSheetId) return out;
+  if (!s.contactSheetId) return {};
   try {
-    const ss = SpreadsheetApp.openById(s.contactSheetId);
-    const first = ss.getSheets()[0];
-    const sh = ss.getSheetByName(s.contactSheetTab || 'Master Contact Sheet') || first;
-    parseContactTab_(sh, out, sh.getSheetId() === first.getSheetId());
-    if (sh.getSheetId() !== first.getSheetId()) parseContactTab_(first, out, true);
+    return cachedRead_('contacts|' + s.contactSheetId + '|' + (s.contactSheetTab || ''), () => {
+      const out = {};
+      const ss = SpreadsheetApp.openById(s.contactSheetId);
+      const first = ss.getSheets()[0];
+      const sh = ss.getSheetByName(s.contactSheetTab || 'Master Contact Sheet') || first;
+      parseContactTab_(sh, out, sh.getSheetId() === first.getSheetId());
+      if (sh.getSheetId() !== first.getSheetId()) parseContactTab_(first, out, true);
+      return out;
+    });
   } catch (err) {
     console.error('Could not read contact sheet: ' + err);
+    PARTIAL_ = true;
+    return {};
   }
-  return out;
 }
 
 function parseContactTab_(sh, out, isFirst) {
@@ -538,7 +643,8 @@ function unassigned_(s, sched, leaders, book) {
  *   sectionNotes: sentences typed on their own row above a section (one note per line;
  *                 a line starting with ! is a red alert, "7:45 AM: ..." belongs to that shift)
  */
-function readSchedule_() {
+function readSchedule_() { return cachedRead_('schedule', readScheduleRaw_); }
+function readScheduleRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(SCHEDULE_TAB);
   if (!sh) throw new Error('Missing tab: ' + SCHEDULE_TAB);
   const vals = sh.getDataRange().getDisplayValues();
@@ -737,7 +843,8 @@ const CANCEL_TAB = 'Cancellations';
 const CANCEL_HEADER = ['Name (Last, First)', 'Cancelled by', 'When', 'Sections'];
 
 /** People marked as a Cancellation/No-show: they can't be picked for spots until allowed again. */
-function readCancelled_() {
+function readCancelled_() { return cachedRead_('cancelled', readCancelledRaw_); }
+function readCancelledRaw_() {
   const out = {};
   const sh = SpreadsheetApp.getActive().getSheetByName(CANCEL_TAB);
   if (!sh || sh.getLastRow() < 2) return out;
@@ -792,6 +899,11 @@ function sheet_(name, header) {
  *   swap: oldName + newName · fill: newName only · remove: oldName only
  */
 function apiEdit(code, req) {
+  // badge check-in taps don't change the schedule (the check-in screen checks every 10 seconds by itself)
+  if (req && req.checkin && !/^(setCheckers|clearAll)$/.test(String(req.op))) { FRESH_ = true; return editNow_(code, req); }
+  return saving_(() => editNow_(code, req));
+}
+function editNow_(code, req) {
   if (req && req.unscheduled) return setUnscheduled_(code, req);
   if (req && req.reduced) return setReduced_(code, req);
   if (req && req.reopen) return reopenClosed_(code, req);
@@ -900,7 +1012,8 @@ function apiEdit(code, req) {
  * Overseers and keymen: mark someone as a no-show — clears every assignment they have today.
  * Keymen can only do this for people scheduled in their own sections.
  */
-function apiNoShow(code, name) {
+function apiNoShow(code, name) { return saving_(() => noShowNow_(code, name)); }
+function noShowNow_(code, name) {
   const me = leaderByCode_(code);
   if (!me) return { ok: false, error: 'Only overseers and keymen can mark a cancellation/no-show.' };
   const lock = LockService.getScriptLock();
@@ -942,7 +1055,8 @@ function apiNoShow(code, name) {
 }
 
 /** Everyone on the Cancellations tab, for the overseer page's undo list. */
-function readCancelledList_() {
+function readCancelledList_() { return cachedRead_('cancelledList', readCancelledListRaw_); }
+function readCancelledListRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(CANCEL_TAB);
   if (!sh || sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, 4).getDisplayValues()
@@ -957,7 +1071,8 @@ function cancelledFor_(me) {
 function inSections_(me, sec) { return me.all || me.sections.map(norm_).indexOf(norm_(sec)) >= 0; }
 
 /** Overseers and keymen: undo a cancellation ("Add back to roster") so the person can be scheduled again. */
-function apiAllowAgain(code, name) {
+function apiAllowAgain(code, name) { return saving_(() => allowAgainNow_(code, name)); }
+function allowAgainNow_(code, name) {
   const me = leaderByCode_(code);
   if (!me) return { ok: false, error: 'Only overseers and keymen can add someone back to the roster.' };
   const key = norm_(toLastFirst_(name));
@@ -1042,6 +1157,9 @@ function syncDataSource() {
   // a change on the contact sheet runs this in that sheet's context, so point back at the schedule
   const id = PropertiesService.getScriptProperties().getProperty('SCHEDULE_ID');
   if (id) SpreadsheetApp.setActiveSpreadsheet(SpreadsheetApp.openById(id));
+  // someone typed into the Schedule tab or the Master Contact Sheet: open pages pick it up on their next check
+  FRESH_ = true;
+  markChanged_();
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(30000)) return { ok: false, error: 'Busy; the next change will sync.' };
   try {
@@ -1078,6 +1196,7 @@ function syncDataSource() {
       removed: current.filter(v => !keep[norm_(v)])
     };
   } finally {
+    markChanged_();   // again, after any codes it filled in
     lock.releaseLock();
   }
 }
@@ -1154,6 +1273,7 @@ function readCodes_(s) {
     });
   } catch (err) {
     console.error('Could not read access codes: ' + err);
+    PARTIAL_ = true;
     return (CODES_ = {});
   }
   cache.put('codes', JSON.stringify(out), 600);
@@ -1203,6 +1323,7 @@ function ensureCodes_(s, book) {
     col.setNumberFormat('@');
     col.setValues(rows.map(r => [r.c]));
     forgetCodes_();
+    markChanged_();   // new codes = new links on the overseer page
   } catch (err) {
     console.error('Could not fill in access codes: ' + err);
   }
@@ -1477,7 +1598,8 @@ function newLink_(code, name) {
 }
 
 /** Overseers: ignore (or un-ignore) a double-booking. */
-function apiIgnore(code, key, text, undo) {
+function apiIgnore(code, key, text, undo) { return saving_(() => ignoreNow_(code, key, text, undo)); }
+function ignoreNow_(code, key, text, undo) {
   const me = overseer_(code);
   if (!me) return { ok: false };
   const sh = sheet_(IGNORE_TAB, ['Conflict key', 'Conflict', 'Ignored by', 'When']);
@@ -1794,7 +1916,8 @@ const UNSCHED_TAB = 'Unscheduled Spots';
 const UNSCHED_HEADER = ['Section', 'Spot', 'Time', 'Note', 'By', 'When'];
 
 /** Spots marked "leave unscheduled". Time is a slot label (e.g. 9:40 AM) or "All day". */
-function readUnscheduled_() {
+function readUnscheduled_() { return cachedRead_('unscheduled', readUnscheduledRaw_); }
+function readUnscheduledRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(UNSCHED_TAB);
   if (!sh || sh.getLastRow() < 2) return [];
   return sh.getRange(2, 1, sh.getLastRow() - 1, 6).getDisplayValues().filter(r => String(r[0]).trim() && String(r[1]).trim())
@@ -1884,11 +2007,12 @@ let REDUCED_ = null;   // read once per request
 /** Spot times cut back on purpose when traffic dies down. Time is a slot label (e.g. 10:40 AM). */
 function readReduced_() {
   if (REDUCED_) return REDUCED_;
-  const sh = SpreadsheetApp.getActive().getSheetByName(REDUCED_TAB);
-  REDUCED_ = !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, 5).getDisplayValues()
-    .filter(r => String(r[0]).trim() && String(r[2]).trim())
-    .map(r => ({ section: r[0].trim(), pos: r[1].trim(), time: r[2].trim(), by: r[3].trim(), when: r[4].trim() }));
-  return REDUCED_;
+  return (REDUCED_ = cachedRead_('reduced', () => {
+    const sh = SpreadsheetApp.getActive().getSheetByName(REDUCED_TAB);
+    return !sh || sh.getLastRow() < 2 ? [] : sh.getRange(2, 1, sh.getLastRow() - 1, 5).getDisplayValues()
+      .filter(r => String(r[0]).trim() && String(r[2]).trim())
+      .map(r => ({ section: r[0].trim(), pos: r[1].trim(), time: r[2].trim(), by: r[3].trim(), when: r[4].trim() }));
+  }));
 }
 /** True when this spot is reduced at slot k and nobody has been put back in it. */
 function isReduced_(row, k, sched) {
@@ -1940,7 +2064,8 @@ function setReduced_(code, req) {
 }
 
 /** Overseers: mark a keyman change as reviewed. */
-function apiReview(code, logRow) {
+function apiReview(code, logRow) { return saving_(() => reviewNow_(code, logRow)); }
+function reviewNow_(code, logRow) {
   const me = overseer_(code);
   if (!me) return { ok: false };
   const sh = sheet_(LOG_TAB, ['When']);
@@ -1984,7 +2109,8 @@ function overseer_(code) {
   return readLeaders_().filter(l => l.all && l.code && l.code === c)[0] || null;
 }
 
-function readIgnored_() {
+function readIgnored_() { return cachedRead_('ignored', readIgnoredRaw_); }
+function readIgnoredRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(IGNORE_TAB);
   const out = {};
   if (sh) sh.getDataRange().getDisplayValues().slice(1).forEach(r => { if (r[0]) out[r[0]] = r[2]; });
@@ -1992,7 +2118,8 @@ function readIgnored_() {
 }
 
 /** Recent changes made from the web pages (newest first). */
-function readChanges_() {
+function readChanges_() { return cachedRead_('changes', readChangesRaw_); }
+function readChangesRaw_() {
   const sh = SpreadsheetApp.getActive().getSheetByName(LOG_TAB);
   if (!sh) return [];
   const vals = sh.getDataRange().getDisplayValues();
